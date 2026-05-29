@@ -1,0 +1,261 @@
+# infrastructure/template.yaml
+# AWS SAM template scaffold for Kitten Companion Lambda functions and supporting infrastructure.
+# See TDD Section 9.1 for full resource specifications and configuration.
+# TODO: Fill in VPC, subnet, and security group IDs before deploying.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Kitten Companion — serverless backend (Lambda + API Gateway + RDS + ElastiCache)
+
+# ------------------------------------------------------------------
+# Parameters
+# ------------------------------------------------------------------
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment
+
+  # TODO: Replace with actual VPC/subnet/SG IDs (TDD Section 9.1)
+  LambdaSecurityGroupId:
+    Type: String
+    Default: sg-placeholder
+  PrivateSubnet1Id:
+    Type: String
+    Default: subnet-placeholder1
+  PrivateSubnet2Id:
+    Type: String
+    Default: subnet-placeholder2
+
+# ------------------------------------------------------------------
+# Global defaults applied to all Lambda functions
+# TDD Section 9.1
+# ------------------------------------------------------------------
+Globals:
+  Function:
+    MemorySize: 512
+    Timeout: 30
+    VpcConfig:
+      SecurityGroupIds:
+        - !Ref LambdaSecurityGroupId
+      SubnetIds:
+        - !Ref PrivateSubnet1Id
+        - !Ref PrivateSubnet2Id
+    Environment:
+      Variables:
+        # TODO: Replace placeholders with actual SSM/Secrets Manager references (TDD Section 9.1)
+        DB_HOST: !GetAtt RDSInstance.Endpoint.Address
+        DB_PORT: 5432
+        REDIS_HOST: !GetAtt ElastiCacheCluster.RedisEndpoint.Address
+        ANTHROPIC_API_KEY: !Sub '{{resolve:secretsmanager:anthropic-api-key:SecretString:api-key}}'
+        JWT_SECRET: !Sub '{{resolve:secretsmanager:jwt-secret:SecretString:secret}}'
+        ENVIRONMENT: !Ref Environment
+        LOG_LEVEL: !If [IsProd, warn, debug]
+
+# ------------------------------------------------------------------
+# Resources
+# ------------------------------------------------------------------
+Resources:
+
+  # ----------------------------------------------------------------
+  # Auth Lambda (Node.js) — TDD Section 3.1
+  # TODO: Add all auth routes (signup, verify, refresh, logout) as events
+  # ----------------------------------------------------------------
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-auth-${Environment}'
+      CodeUri: ../services/auth
+      Handler: dist/index.handler
+      Runtime: nodejs20.x
+      Description: Handles OTP signup, JWT verification, token refresh, and logout
+      Events:
+        SignupAPI:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/signup
+            Method: POST
+        VerifyAPI:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/verify
+            Method: POST
+        RefreshAPI:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/refresh
+            Method: POST
+        LogoutAPI:
+          Type: Api
+          Properties:
+            RestApiId: !Ref ApiGateway
+            Path: /auth/logout
+            Method: POST
+      # TODO: Add IAM role with Secrets Manager and RDS permissions (TDD Section 9.1)
+
+  # ----------------------------------------------------------------
+  # User Lambda (Node.js) — TDD Section 3.2
+  # TODO: Add GET/PUT/DELETE/confirm-deletion route events
+  # ----------------------------------------------------------------
+  UserFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-user-${Environment}'
+      CodeUri: ../services/user
+      Handler: dist/index.handler
+      Runtime: nodejs20.x
+      Description: Manages user profile CRUD and account deletion flow
+
+  # ----------------------------------------------------------------
+  # Pet Lambda (Java) — TDD Section 3.3
+  # TODO: Add all pet CRUD route events
+  # ----------------------------------------------------------------
+  PetFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-pet-${Environment}'
+      CodeUri: ../services/pet
+      Handler: com.newcat.pet.PetLambda
+      Runtime: java21
+      Description: Manages pet profile creation, retrieval, and update
+
+  # ----------------------------------------------------------------
+  # Check-in Lambda (Java) — TDD Section 3.4
+  # TODO: Add POST /checkins and GET /pets/{id}/checkins events
+  # ----------------------------------------------------------------
+  CheckinFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-checkin-${Environment}'
+      CodeUri: ../services/checkin
+      Handler: com.newcat.checkin.CheckinLambda
+      Runtime: java21
+      Description: Handles daily check-in submission and history retrieval
+
+  # ----------------------------------------------------------------
+  # Triage Lambda (Java) — TDD Section 3.5
+  # TODO: Add POST /concerns, GET /concerns/{id}, POST /concerns/{id}/resolve events
+  # ----------------------------------------------------------------
+  TriageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-triage-${Environment}'
+      CodeUri: ../services/triage
+      Handler: com.newcat.triage.TriageLambda
+      Runtime: java21
+      Description: Triages acute concerns using rule-based logic and Claude LLM
+
+  # ----------------------------------------------------------------
+  # Pattern Detection Lambda (Java) — TDD Section 4.3
+  # TODO: Wire to EventBridge scheduled rule for nightly execution
+  # ----------------------------------------------------------------
+  PatternDetectionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-pattern-detection-${Environment}'
+      CodeUri: ../services/pattern-detection
+      Handler: com.newcat.pattern.PatternDetectionLambda
+      Runtime: java21
+      Description: Analyzes weekly check-in patterns and generates behavioral digests
+
+  # ----------------------------------------------------------------
+  # Vet Summary Lambda (Java) — TDD Section 4.4
+  # TODO: Add GET /pets/{id}/summaries and POST /pets/{id}/summaries events
+  # ----------------------------------------------------------------
+  VetSummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-vet-summary-${Environment}'
+      CodeUri: ../services/vet-summary
+      Handler: com.newcat.vetsummary.VetSummaryLambda
+      Runtime: java21
+      Description: Generates HTML/text vet summary reports using Claude LLM
+
+  # ----------------------------------------------------------------
+  # Notification Lambda (Node.js) — TDD Section 3.1
+  # TODO: Wire SQS trigger for email delivery queue
+  # ----------------------------------------------------------------
+  NotificationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'kittencompanion-notification-${Environment}'
+      CodeUri: ../services/notification
+      Handler: dist/index.handler
+      Runtime: nodejs20.x
+      Description: Sends reminder emails and digest notifications via SendGrid
+
+  # ----------------------------------------------------------------
+  # API Gateway
+  # TDD Section 9.1
+  # ----------------------------------------------------------------
+  ApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'kittencompanion-api-${Environment}'
+      StageName: !Ref Environment
+      # TODO: Configure CORS allowed origins for production domain (TDD Section 11)
+      Cors:
+        AllowOrigin: "'*'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+
+  # ----------------------------------------------------------------
+  # RDS PostgreSQL 15
+  # TDD Section 1.1, 9.1
+  # TODO: Add DBSubnetGroupName, VpcSecurityGroupIds, and MultiAZ settings
+  # ----------------------------------------------------------------
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub 'kittencompanion-${Environment}'
+      Engine: postgres
+      EngineVersion: '15.3'
+      DBInstanceClass: !If [IsProd, db.t3.small, db.t3.micro]
+      AllocatedStorage: 20
+      StorageType: gp3
+      MasterUsername: !Sub '{{resolve:secretsmanager:db-credentials:SecretString:username}}'
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:db-credentials:SecretString:password}}'
+      DBName: !Sub 'newcat_${Environment}'
+      MultiAZ: !If [IsProd, true, false]
+      BackupRetentionPeriod: !If [IsProd, 30, 7]
+      EnableIAMDatabaseAuthentication: true
+    # TODO: Set DeletionPolicy: Retain for prod (TDD Section 9.1)
+
+  # ----------------------------------------------------------------
+  # ElastiCache Redis 7
+  # TDD Section 5.1
+  # TODO: Add CacheSubnetGroupName and VpcSecurityGroupIds
+  # ----------------------------------------------------------------
+  ElastiCacheCluster:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      CacheNodeType: !If [IsProd, cache.t3.small, cache.t3.micro]
+      Engine: redis
+      EngineVersion: '7.0'
+      NumCacheNodes: 1
+
+# ------------------------------------------------------------------
+# Conditions
+# ------------------------------------------------------------------
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+
+# ------------------------------------------------------------------
+# Outputs
+# ------------------------------------------------------------------
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway base URL
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  AuthFunctionArn:
+    Value: !GetAtt AuthFunction.Arn
+  PetFunctionArn:
+    Value: !GetAtt PetFunction.Arn
+  CheckinFunctionArn:
+    Value: !GetAtt CheckinFunction.Arn
+  TriageFunctionArn:
+    Value: !GetAtt TriageFunction.Arn
