@@ -17,7 +17,18 @@ fi
 
 echo "Running migrations for environment: $ENVIRONMENT"
 
-# TODO: Load environment-specific connection variables (TDD Section 8.2)
+ENV_FILE=".env.${ENVIRONMENT}"
+if [[ "$ENVIRONMENT" == "dev" && -f ".env" ]]; then
+  ENV_FILE=".env"
+fi
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 if [[ "$ENVIRONMENT" == "dev" ]]; then
   DB_HOST="${DB_HOST:-localhost}"
   DB_PORT="${DB_PORT:-5432}"

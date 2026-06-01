@@ -28,7 +28,8 @@ if [[ "$ENVIRONMENT" == "dev" ]]; then
   DB_PORT="${DB_PORT:-5432}"
   DB_USER="${DB_USER:-devuser}"
   DB_NAME="${DB_NAME:-newcat_dev}"
-  export PGPASSWORD="${DB_PASSWORD:-devpassword}"
+  source "$(dirname "$0")/../../.env" 2>/dev/null || true
+  export PGPASSWORD="${DB_PASSWORD}"
 else
   # TODO: Load from Secrets Manager for staging (TDD Section 9.1)
   echo "ERROR: Staging seed requires Secrets Manager integration (not yet implemented)."

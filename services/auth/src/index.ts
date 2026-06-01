@@ -6,6 +6,7 @@
 
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { signupHandler } from './handlers/signup';
+import { loginHandler } from './handlers/login';
 import { verifyHandler } from './handlers/verify';
 import { refreshHandler } from './handlers/refresh';
 import { logoutHandler } from './handlers/logout';
@@ -31,6 +32,8 @@ export const handler = async (
   try {
     if (path === '/auth/signup' && method === 'POST') {
       return await signupHandler(event, context);
+    } else if (path === '/auth/login' && method === 'POST') {
+      return await loginHandler(event, context);
     } else if (path === '/auth/verify' && method === 'POST') {
       return await verifyHandler(event, context);
     } else if (path === '/auth/refresh' && method === 'POST') {

@@ -1,15 +1,6 @@
 package com.newcat.pet.entity;
 
-/**
- * JPA entity representing a row in the pets table.
- * Field names match the database column names defined in TDD Section 1.3.
- * JSONB columns (medicalHistory, householdContext) are stored as String for simplicity;
- * TODO: convert to typed value objects in Phase 3 implementation.
- */
-
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -19,8 +10,6 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "pets")
-@Data
-@NoArgsConstructor
 public class Pet {
 
     @Id
@@ -31,9 +20,6 @@ public class Pet {
     @Column(name = "user_id", nullable = false)
     private UUID userId;
 
-    // ------------------------------------------------------------------
-    // Basic info — TDD Section 1.3
-    // ------------------------------------------------------------------
     @Column(name = "name", nullable = false, length = 100)
     private String name;
 
@@ -41,14 +27,11 @@ public class Pet {
     private Integer ageMonths;
 
     @Column(name = "gender", length = 20)
-    private String gender;           // 'male' | 'female' | 'unknown'
+    private String gender;
 
     @Column(name = "neutered_spayed", length = 20)
-    private String neuteredSpayed;   // 'yes' | 'no' | 'unknown'
+    private String neuteredSpayed;
 
-    // ------------------------------------------------------------------
-    // Breed and background
-    // ------------------------------------------------------------------
     @Column(name = "breed", length = 100)
     private String breed;
 
@@ -56,15 +39,11 @@ public class Pet {
     private LocalDate adoptionDate;
 
     @Column(name = "source", length = 50)
-    private String source;           // 'shelter' | 'breeder' | 'friend_family' | 'stray' | 'other'
+    private String source;
 
     @Column(name = "sibling_bonded", length = 20)
-    private String siblingBonded;    // 'yes' | 'no' | 'unsure'
+    private String siblingBonded;
 
-    // ------------------------------------------------------------------
-    // JSONB columns — TDD Section 1.3
-    // TODO: Replace String with strongly-typed classes (MedicalHistory, HouseholdContext)
-    // ------------------------------------------------------------------
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "medical_history", columnDefinition = "jsonb")
     private String medicalHistory;
@@ -76,9 +55,6 @@ public class Pet {
     @Column(name = "current_concerns", columnDefinition = "TEXT")
     private String currentConcerns;
 
-    // ------------------------------------------------------------------
-    // Audit timestamps
-    // ------------------------------------------------------------------
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
@@ -98,4 +74,54 @@ public class Pet {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
+
+    public Pet() {}
+
+    public UUID getId() { return id; }
+    public void setId(UUID id) { this.id = id; }
+
+    public UUID getUserId() { return userId; }
+    public void setUserId(UUID userId) { this.userId = userId; }
+
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+
+    public Integer getAgeMonths() { return ageMonths; }
+    public void setAgeMonths(Integer ageMonths) { this.ageMonths = ageMonths; }
+
+    public String getGender() { return gender; }
+    public void setGender(String gender) { this.gender = gender; }
+
+    public String getNeuteredSpayed() { return neuteredSpayed; }
+    public void setNeuteredSpayed(String neuteredSpayed) { this.neuteredSpayed = neuteredSpayed; }
+
+    public String getBreed() { return breed; }
+    public void setBreed(String breed) { this.breed = breed; }
+
+    public LocalDate getAdoptionDate() { return adoptionDate; }
+    public void setAdoptionDate(LocalDate adoptionDate) { this.adoptionDate = adoptionDate; }
+
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
+
+    public String getSiblingBonded() { return siblingBonded; }
+    public void setSiblingBonded(String siblingBonded) { this.siblingBonded = siblingBonded; }
+
+    public String getMedicalHistory() { return medicalHistory; }
+    public void setMedicalHistory(String medicalHistory) { this.medicalHistory = medicalHistory; }
+
+    public String getHouseholdContext() { return householdContext; }
+    public void setHouseholdContext(String householdContext) { this.householdContext = householdContext; }
+
+    public String getCurrentConcerns() { return currentConcerns; }
+    public void setCurrentConcerns(String currentConcerns) { this.currentConcerns = currentConcerns; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
 }

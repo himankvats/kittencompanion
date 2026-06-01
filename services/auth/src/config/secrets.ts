@@ -9,31 +9,47 @@ import { logger } from '../utils/logger';
 
 const client = new SecretsManagerClient({
   region: process.env.AWS_REGION ?? 'us-east-1',
-  // TODO: For local development point to LocalStack endpoint (TDD Section 8.2)
-  // endpoint: process.env.LOCALSTACK_ENDPOINT,
+  ...(process.env.LOCALSTACK_ENDPOINT ? { endpoint: process.env.LOCALSTACK_ENDPOINT } : {}),
 });
 
 // In-memory cache — secrets are stable within a Lambda instance lifetime
 const cache: Record<string, string> = {};
 
-// TODO: Implement getSecret (TDD Section 9.1)
-// 1. Check in-memory cache first
-// 2. Call SecretsManager.GetSecretValue
-// 3. Cache and return the secret string
-// 4. Fall back to environment variable of the same name in local dev
 export async function getSecret(secretName: string): Promise<string> {
   if (cache[secretName]) {
     return cache[secretName];
   }
 
-  // Local dev shortcut — fall back to env vars (TDD Section 8.2)
-  if (process.env.ENVIRONMENT === 'local' && process.env[secretName.toUpperCase().replace(/-/g, '_')]) {
-    const localValue = process.env[secretName.toUpperCase().replace(/-/g, '_')] as string;
+  // Local dev: read from env vars (e.g. jwt-secret → JWT_SECRET)
+  if (process.env.ENVIRONMENT === 'local') {
+    const envKey = secretName.toUpperCase().replace(/-/g, '_');
+    const localValue = process.env[envKey];
+    if (!localValue) {
+      throw new Error(`Missing env var ${envKey} for local secret '${secretName}'`);
+    }
     cache[secretName] = localValue;
     return localValue;
   }
 
-  throw new Error('Not implemented - see TDD Section 9.1 (AWS Secrets Manager integration)');
+  const command = new GetSecretValueCommand({ SecretId: secretName });
+  const response = await client.send(command);
+
+  let value: string;
+  if (response.SecretString) {
+    // Secrets Manager stores as JSON object — extract by key or return raw string
+    try {
+      const parsed = JSON.parse(response.SecretString) as Record<string, string>;
+      value = parsed[secretName] ?? response.SecretString;
+    } catch {
+      value = response.SecretString;
+    }
+  } else {
+    throw new Error(`Secret '${secretName}' has no string value`);
+  }
+
+  cache[secretName] = value;
+  logger.info('Secret loaded from Secrets Manager', { secretName });
+  return value;
 }
 
 export default getSecret;

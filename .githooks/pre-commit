@@ -1,0 +1,182 @@
+#!/bin/bash
+# .githooks/pre-commit
+# Runs before commit to validate staged changes
+# Checks: linting, formatting, type checks, migrations, secrets, dependencies
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+FAILED=0
+SKIPPED=0
+
+echo -e "${GREEN}Running pre-commit checks...${NC}\n"
+
+# ============================================================
+# 1. LINT AND FORMAT (Node.js services)
+# ============================================================
+
+check_node_service() {
+    local service=$1
+    if [ ! -f "services/$service/package.json" ]; then
+        return
+    fi
+
+    echo -e "${YELLOW}[Node] Linting $service...${NC}"
+    if [ -f "services/$service/package.json" ] && grep -q '"lint"' "services/$service/package.json"; then
+        cd "services/$service"
+        if npm run lint 2>/dev/null; then
+            echo -e "${GREEN}✓ $service lint passed${NC}"
+        else
+            echo -e "${RED}✗ $service lint failed${NC}"
+            ((FAILED++))
+        fi
+        cd - > /dev/null
+    fi
+}
+
+for service in auth user notification; do
+    if git diff --cached --name-only | grep -q "^services/$service/"; then
+        check_node_service "$service"
+    fi
+done
+
+# Format check for Node services
+if git diff --cached --name-only | grep -qE 'services/(auth|user|notification|frontend)/'; then
+    echo -e "${YELLOW}[Node] Checking code formatting...${NC}"
+    if command -v prettier &> /dev/null; then
+        if prettier --check services/auth/src services/user/src services/notification/src 2>/dev/null; then
+            echo -e "${GREEN}✓ Prettier formatting check passed${NC}"
+        else
+            echo -e "${YELLOW}⚠ Run: npm run format${NC}"
+        fi
+    else
+        echo -e "${YELLOW}⚠ Prettier not installed, skipping format check${NC}"
+        ((SKIPPED++))
+    fi
+fi
+
+# ============================================================
+# 2. TYPE CHECKING (TypeScript services)
+# ============================================================
+
+check_ts_service() {
+    local service=$1
+    if [ ! -f "services/$service/tsconfig.json" ]; then
+        return
+    fi
+
+    echo -e "${YELLOW}[TypeScript] Type checking $service...${NC}"
+    cd "services/$service"
+    if npx tsc --noEmit 2>/dev/null; then
+        echo -e "${GREEN}✓ $service type check passed${NC}"
+    else
+        echo -e "${RED}✗ $service type check failed${NC}"
+        ((FAILED++))
+    fi
+    cd - > /dev/null
+}
+
+for service in auth user notification frontend; do
+    if git diff --cached --name-only | grep -q "^services/$service/.*\.ts$"; then
+        check_ts_service "$service"
+    fi
+done
+
+# ============================================================
+# 3. MIGRATION VALIDATION
+# ============================================================
+
+if git diff --cached --name-only | grep -q "^database/migrations/"; then
+    echo -e "${YELLOW}[Migration] Validating migrations...${NC}"
+
+    # Check for duplicate migration numbers
+    if ls database/migrations/*.sql 2>/dev/null | wc -l > /dev/null; then
+        duplicates=$(ls database/migrations/*.sql 2>/dev/null | sed 's/.*\///; s/_.*//' | sort | uniq -d)
+        if [ -n "$duplicates" ]; then
+            echo -e "${RED}✗ Duplicate migration numbers found: $duplicates${NC}"
+            ((FAILED++))
+        else
+            echo -e "${GREEN}✓ No duplicate migration numbers${NC}"
+        fi
+    fi
+
+    # Check each migration has rollback comment
+    for migration in $(git diff --cached --name-only | grep "database/migrations/.*\.sql$"); do
+        if [ -f "$migration" ]; then
+            if grep -q "^-- ROLLBACK:" "$migration"; then
+                echo -e "${GREEN}✓ $migration has rollback${NC}"
+            else
+                echo -e "${YELLOW}⚠ $migration missing rollback comment${NC}"
+            fi
+        fi
+    done
+fi
+
+# ============================================================
+# 4. SECRET SCANNING
+# ============================================================
+
+echo -e "${YELLOW}[Security] Scanning for secrets...${NC}"
+
+# Patterns that look like hardcoded secrets: KEY=value where value is not empty,
+# a placeholder (<...>), a shell variable (${...}), or a config reference.
+secret_patterns=(
+    "(API_KEY|SECRET_KEY|PRIVATE_KEY|ACCESS_KEY_ID|SECRET_ACCESS_KEY)\s*=\s*['\"]?[A-Za-z0-9+/]{20,}['\"]?"
+    "aws_access_key_id\s*=\s*[A-Z0-9]{16,}"
+    "aws_secret_access_key\s*=\s*[A-Za-z0-9+/]{30,}"
+    "-----BEGIN (RSA|EC|OPENSSH|PGP) PRIVATE KEY-----"
+)
+
+for pattern in "${secret_patterns[@]}"; do
+    if git diff --cached | grep -iE "^\+.*$pattern" > /dev/null; then
+        echo -e "${RED}✗ Potential secret found: $pattern${NC}"
+        ((FAILED++))
+    fi
+done
+
+if [ $FAILED -eq 0 ]; then
+    echo -e "${GREEN}✓ No secrets detected${NC}"
+fi
+
+# ============================================================
+# 5. DEPENDENCY VULNERABILITY CHECK
+# ============================================================
+
+echo -e "${YELLOW}[Dependencies] Checking for vulnerabilities...${NC}"
+
+for package_json in $(git diff --cached --name-only | grep "package.json$"); do
+    if [ -f "$package_json" ]; then
+        service_dir=$(dirname "$package_json")
+        echo -e "${YELLOW}Auditing $service_dir...${NC}"
+        cd "$service_dir"
+        if npm audit --audit-level=moderate 2>/dev/null; then
+            echo -e "${GREEN}✓ $service_dir audit passed${NC}"
+        else
+            echo -e "${YELLOW}⚠ Vulnerabilities found in $service_dir (use --no-verify to skip)${NC}"
+            ((SKIPPED++))
+        fi
+        cd - > /dev/null
+    fi
+done
+
+# ============================================================
+# SUMMARY
+# ============================================================
+
+echo ""
+if [ $FAILED -gt 0 ]; then
+    echo -e "${RED}Pre-commit failed with $FAILED error(s)${NC}"
+    echo "Use 'git commit --no-verify' to skip pre-commit checks."
+    exit 1
+elif [ $SKIPPED -gt 0 ]; then
+    echo -e "${YELLOW}Pre-commit completed with $SKIPPED warning(s)${NC}"
+    echo -e "${GREEN}Commit allowed, but review warnings above${NC}"
+    exit 0
+else
+    echo -e "${GREEN}✓ All pre-commit checks passed${NC}"
+    exit 0
+fi

@@ -79,13 +79,6 @@
       <version>2.25.60</version>
     </dependency>
 
-    <!-- Lombok (reduce boilerplate) -->
-    <dependency>
-      <groupId>org.projectlombok</groupId>
-      <artifactId>lombok</artifactId>
-      <optional>true</optional>
-    </dependency>
-
     <!-- JSON / JJWT -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -127,13 +120,13 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <excludes>
-            <exclude>
-              <groupId>org.projectlombok</groupId>
-              <artifactId>lombok</artifactId>
-            </exclude>
-          </excludes>
+          <jvm>/Library/Java/JavaVirtualMachines/amazon-corretto-21.jdk/Contents/Home/bin/java</jvm>
+          <argLine>-javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/1.14.13/byte-buddy-agent-1.14.13.jar</argLine>
         </configuration>
       </plugin>
     </plugins>

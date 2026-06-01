@@ -2,7 +2,7 @@ package com.newcat.pet.util;
 
 /**
  * Validates HS256 JWT tokens extracted from the Authorization header.
- * Fetches the signing key from AWS Secrets Manager at startup.
+ * Fetches the signing key from the JWT_SECRET environment variable at startup.
  * See TDD Section 11.2 for full authentication and authorization specification.
  */
 
@@ -11,6 +11,8 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -19,26 +21,37 @@ import java.util.Base64;
 @Component
 public class JWTValidator {
 
-    // TODO: Inject signing key from AWS Secrets Manager on startup (TDD Section 11.2)
+    @Value("${JWT_SECRET:}")
+    private String jwtSecretBase64;
+
     private SecretKey key;
 
-    /**
-     * Validates the JWT and returns its Claims.
-     * TODO: Implement (TDD Section 11.2)
-     * - Parse with JJWT Jwts.parserBuilder()
-     * - Throw RuntimeException("TOKEN_EXPIRED") on expiry
-     * - Throw RuntimeException("INVALID_TOKEN") on any other failure
-     */
-    public Claims validateToken(String token) {
-        throw new UnsupportedOperationException("Not implemented - see TDD Section 11.2");
+    @PostConstruct
+    public void init() {
+        if (jwtSecretBase64 == null || jwtSecretBase64.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET environment variable is not set");
+        }
+        byte[] keyBytes = Base64.getDecoder().decode(jwtSecretBase64);
+        this.key = Keys.hmacShaKeyFor(keyBytes);
     }
 
-    /**
-     * Verifies that the JWT subject matches the resource owner.
-     * TODO: Implement (TDD Section 11.2)
-     * - Throws RuntimeException("FORBIDDEN") if userId != resourceOwnerId
-     */
+    public Claims validateToken(String token) {
+        try {
+            return Jwts.parser()
+                    .verifyWith(key)
+                    .build()
+                    .parseSignedClaims(token)
+                    .getPayload();
+        } catch (ExpiredJwtException e) {
+            throw new RuntimeException("TOKEN_EXPIRED");
+        } catch (JwtException e) {
+            throw new RuntimeException("INVALID_TOKEN");
+        }
+    }
+
     public void verifyOwnership(String userId, String resourceOwnerId) {
-        throw new UnsupportedOperationException("Not implemented - see TDD Section 11.2");
+        if (userId == null || !userId.equals(resourceOwnerId)) {
+            throw new RuntimeException("FORBIDDEN");
+        }
     }
 }
