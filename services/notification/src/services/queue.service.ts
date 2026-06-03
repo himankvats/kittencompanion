@@ -6,21 +6,22 @@
 
 import { SQSClient, DeleteMessageCommand } from '@aws-sdk/client-sqs';
 
-const sqsClient = new SQSClient({
+export const sqsClient = new SQSClient({
   region: process.env.AWS_REGION ?? 'us-east-1',
-  // TODO: Add endpoint override for LocalStack in local dev (TDD Section 8.1)
+  ...(process.env.LOCALSTACK_ENDPOINT ? { endpoint: process.env.LOCALSTACK_ENDPOINT } : {}),
 });
 
-// TODO: Implement parseMessage (TDD Section 3.1)
-// Safely parses the SQS message body as the given type
-export function parseMessage<T>(body: string): T {
-  throw new Error('Not implemented - see TDD Section 3.1');
+export class QueueService {
+  static parseMessage<T>(body: string): T {
+    return JSON.parse(body) as T;
+  }
+
+  static async deleteMessage(queueUrl: string, receiptHandle: string): Promise<void> {
+    await sqsClient.send(new DeleteMessageCommand({
+      QueueUrl: queueUrl,
+      ReceiptHandle: receiptHandle,
+    }));
+  }
 }
 
-// TODO: Implement deleteMessage (TDD Section 3.1)
-// Deletes a successfully processed message from SQS
-export async function deleteMessage(queueUrl: string, receiptHandle: string): Promise<void> {
-  throw new Error('Not implemented - see TDD Section 3.1');
-}
-
-export { sqsClient };
+export default QueueService;

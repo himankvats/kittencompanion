@@ -31,7 +31,7 @@ public class JWTValidator {
         if (jwtSecretBase64 == null || jwtSecretBase64.isBlank()) {
             throw new IllegalStateException("JWT_SECRET environment variable is not set");
         }
-        byte[] keyBytes = Base64.getDecoder().decode(jwtSecretBase64);
+        byte[] keyBytes = jwtSecretBase64.getBytes(java.nio.charset.StandardCharsets.UTF_8);
         this.key = Keys.hmacShaKeyFor(keyBytes);
     }
 

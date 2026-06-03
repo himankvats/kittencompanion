@@ -20,7 +20,6 @@ public class VetSummaryLambda implements RequestHandler<APIGatewayProxyRequestEv
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent input, Context context) {
-        // TODO: Implement Spring bootstrap and delegation (TDD Section 2.6)
         if (VetSummaryLambda.springContext == null) {
             VetSummaryLambda.springContext = SpringApplication.run(VetSummaryApplication.class);
         }

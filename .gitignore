@@ -1,5 +1,10 @@
-# Logs
-logs
+# OS
+.DS_Store
+**/.DS_Store
+
+# Local dev
+.dev-pids
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*

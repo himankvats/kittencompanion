@@ -25,7 +25,8 @@ export const signupHandler = async (
     throw new CustomError(400, 'INVALID_JSON', 'Request body must be valid JSON');
   }
 
-  const { email, first_name, last_name } = body;
+  const { first_name, last_name } = body;
+  const email = (body.email ?? '').toLowerCase().trim();
 
   if (!email || !validateEmail(email)) {
     throw new CustomError(400, 'INVALID_EMAIL', 'Email format is invalid');

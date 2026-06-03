@@ -23,7 +23,7 @@ export const loginHandler = async (
     throw new CustomError(400, 'INVALID_JSON', 'Request body must be valid JSON');
   }
 
-  const { email } = body;
+  const email = (body.email ?? '').toLowerCase().trim();
 
   if (!email || !validateEmail(email)) {
     throw new CustomError(400, 'INVALID_EMAIL', 'Email format is invalid');

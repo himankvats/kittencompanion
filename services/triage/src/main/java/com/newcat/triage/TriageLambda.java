@@ -19,7 +19,7 @@ public class TriageLambda implements RequestHandler<APIGatewayProxyRequestEvent,
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent input, Context context) {
-        // TODO: Implement Spring bootstrap and delegation (TDD Section 3.5)
+        // Bootstrap Spring context once per Lambda container (warm start after first invocation)
         if (TriageLambda.springContext == null) {
             TriageLambda.springContext = SpringApplication.run(TriageApplication.class);
         }

@@ -1,35 +1,41 @@
-/**
- * Reusable labeled input component. Wraps an HTML input with a label and
- * optional error message for use across all forms.
- */
+'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
+  optional?: boolean;
   error?: string;
+  hint?: string;
   id: string;
 }
 
-export function Input({ label, error, id, className = '', ...props }: InputProps) {
+export function Input({ label, optional, error, hint, id, className = '', ...props }: InputProps) {
+  const [focused, setFocused] = useState(false);
+
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium text-gray-700">
+    <div className="mb-4">
+      <label
+        htmlFor={id}
+        className="flex items-center gap-1.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-[#888] mb-1.5"
+      >
         {label}
+        {optional && <span className="text-[10px] font-normal text-[#bbb] normal-case tracking-normal">— Optional</span>}
       </label>
       <input
         id={id}
         {...props}
+        onFocus={e => { setFocused(true); props.onFocus?.(e); }}
+        onBlur={e => { setFocused(false); props.onBlur?.(e); }}
         className={[
-          'w-full px-3 py-2 border rounded-md text-sm shadow-sm',
-          'focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500',
-          error ? 'border-red-400 bg-red-50' : 'border-gray-300 bg-white',
+          'w-full px-[14px] py-3 text-[15px] font-normal bg-white text-[#111]',
+          'border-[1.5px] rounded-[10px] outline-none transition-colors duration-200 box-border',
+          error ? 'border-[#e85d5d]' : focused ? 'border-[#111]' : 'border-[#e0e0e0]',
           className,
-        ].join(' ')}
+        ].filter(Boolean).join(' ')}
       />
-      {error && (
-        <p className="text-xs text-red-600">{error}</p>
-      )}
+      {hint && !error && <p className="text-[12px] text-[#aaa] mt-1 mb-0">{hint}</p>}
+      {error && <p className="text-[12px] text-[#e85d5d] mt-1 mb-0">{error}</p>}
     </div>
   );
 }
