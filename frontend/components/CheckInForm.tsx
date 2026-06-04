@@ -7,7 +7,7 @@ import type { CheckIn } from '@/lib/types';
 
 export type CheckInFormData = Pick<
   CheckIn,
-  'eating_level' | 'litter_status' | 'activity_level' | 'eating_notes' | 'litter_notes' | 'activity_notes' | 'owner_notes'
+  'eating_level' | 'litter_status' | 'activity_level' | 'owner_notes'
 >;
 
 export interface CheckInFormProps {
@@ -60,10 +60,7 @@ export function CheckInForm({ onSubmit, loading = false, petName }: CheckInFormP
       eating_level: eatingLevel as CheckIn['eating_level'],
       litter_status: litterStatus as CheckIn['litter_status'],
       activity_level: activityLevel as CheckIn['activity_level'],
-      owner_notes: ownerNotes || undefined,
-      eating_notes: undefined,
-      litter_notes: undefined,
-      activity_notes: undefined,
+      owner_notes: ownerNotes.trim() || undefined,
     });
   };
 
@@ -87,10 +84,15 @@ export function CheckInForm({ onSubmit, loading = false, petName }: CheckInFormP
         </button>
       ) : (
         <div className="mb-4">
-          <label className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#888] mb-1.5 block">Notes — Optional</label>
+          <div className="flex justify-between items-center mb-1.5">
+            <label className="text-[11px] font-semibold tracking-[0.08em] uppercase text-[#888]">Notes — Optional</label>
+            <span className={`text-[11px] ${ownerNotes.length > 950 ? 'text-[#e85d5d]' : 'text-[#bbb]'}`}>
+              {ownerNotes.length}/1000
+            </span>
+          </div>
           <textarea
             value={ownerNotes}
-            onChange={e => setOwnerNotes(e.target.value)}
+            onChange={e => { if (e.target.value.length <= 1000) setOwnerNotes(e.target.value); }}
             placeholder="Anything else you noticed today..."
             rows={3}
             className="w-full px-3.5 py-3 text-[14px] border-[1.5px] border-[#e0e0e0] rounded-[10px] outline-none focus:border-[#111] resize-none font-sans transition-colors"

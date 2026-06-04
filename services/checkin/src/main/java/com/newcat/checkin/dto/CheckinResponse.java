@@ -27,20 +27,11 @@ public class CheckinResponse {
     @JsonProperty("eating_level")
     private String eatingLevel;
 
-    @JsonProperty("eating_notes")
-    private String eatingNotes;
-
     @JsonProperty("litter_status")
     private String litterStatus;
 
-    @JsonProperty("litter_notes")
-    private String litterNotes;
-
     @JsonProperty("activity_level")
     private String activityLevel;
-
-    @JsonProperty("activity_notes")
-    private String activityNotes;
 
     @JsonProperty("owner_notes")
     private String ownerNotes;

@@ -12,7 +12,7 @@ import com.newcat.checkin.dto.CheckinResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -72,6 +72,12 @@ public class CheckinService {
                     "You are not authorized to access this resource");
         }
 
+        // 3a. Note length validation
+        if (req.getOwnerNotes() != null && req.getOwnerNotes().length() > 1000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "owner_notes must not exceed 1000 characters");
+        }
+
         // 3. Day number + confidence_score validation
         Object adoptionDateObj = pet.get("adoption_date");
         LocalDate adoptionDate = adoptionDateObj != null
@@ -84,29 +90,26 @@ public class CheckinService {
                     "confidence_score only allowed on day 1 and day 120");
         }
 
-        // 4. Insert checkin
-        Map<String, Object> inserted;
-        try {
-            inserted = jdbcTemplate.queryForMap(
-                    "INSERT INTO checkins(pet_id, date, eating_level, eating_notes, " +
-                    "litter_status, litter_notes, activity_level, activity_notes, " +
-                    "owner_notes, confidence_score) " +
-                    "VALUES(CAST(? AS UUID), CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?) " +
-                    "RETURNING id, date, created_at",
-                    req.getPetId(),
-                    req.getEatingLevel(),
-                    req.getEatingNotes(),
-                    req.getLitterStatus(),
-                    req.getLitterNotes(),
-                    req.getActivityLevel(),
-                    req.getActivityNotes(),
-                    req.getOwnerNotes(),
-                    req.getConfidenceScore()
-            );
-        } catch (DataIntegrityViolationException e) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                    "A check-in for this pet already exists today");
-        }
+        // 4. Upsert checkin — update today's row if it already exists
+        Map<String, Object> inserted = jdbcTemplate.queryForMap(
+                "INSERT INTO checkins(pet_id, date, eating_level, litter_status, " +
+                "activity_level, owner_notes, confidence_score) " +
+                "VALUES(CAST(? AS UUID), CURRENT_DATE, ?, ?, ?, ?, ?) " +
+                "ON CONFLICT (pet_id, date) DO UPDATE SET " +
+                "  eating_level    = EXCLUDED.eating_level, " +
+                "  litter_status   = EXCLUDED.litter_status, " +
+                "  activity_level  = EXCLUDED.activity_level, " +
+                "  owner_notes     = EXCLUDED.owner_notes, " +
+                "  confidence_score = EXCLUDED.confidence_score, " +
+                "  updated_at      = CURRENT_TIMESTAMP " +
+                "RETURNING id, date, created_at",
+                req.getPetId(),
+                req.getEatingLevel(),
+                req.getLitterStatus(),
+                req.getActivityLevel(),
+                req.getOwnerNotes(),
+                req.getConfidenceScore()
+        );
 
         // 5. Generate feedback
         String feedbackText = feedbackService.generateFeedback(req, dayNumber, petName);
@@ -156,11 +159,8 @@ public class CheckinService {
         }
 
         resp.setEatingLevel(req.getEatingLevel());
-        resp.setEatingNotes(req.getEatingNotes());
         resp.setLitterStatus(req.getLitterStatus());
-        resp.setLitterNotes(req.getLitterNotes());
         resp.setActivityLevel(req.getActivityLevel());
-        resp.setActivityNotes(req.getActivityNotes());
         resp.setOwnerNotes(req.getOwnerNotes());
         resp.setConfidenceScore(req.getConfidenceScore());
         resp.setFeedbackText(feedbackText);
@@ -200,9 +200,8 @@ public class CheckinService {
 
         // Query checkins
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                "SELECT id, pet_id, date, eating_level, eating_notes, litter_status, " +
-                "litter_notes, activity_level, activity_notes, owner_notes, " +
-                "confidence_score, created_at " +
+                "SELECT id, pet_id, date, eating_level, litter_status, " +
+                "activity_level, owner_notes, confidence_score, created_at " +
                 "FROM checkins WHERE pet_id = CAST(? AS UUID) " +
                 "ORDER BY date DESC LIMIT ? OFFSET ?",
                 petId, limit, offset
@@ -227,11 +226,8 @@ public class CheckinService {
                 r.setDate((LocalDate) dateObj);
             }
             r.setEatingLevel((String) row.get("eating_level"));
-            r.setEatingNotes((String) row.get("eating_notes"));
             r.setLitterStatus((String) row.get("litter_status"));
-            r.setLitterNotes((String) row.get("litter_notes"));
             r.setActivityLevel((String) row.get("activity_level"));
-            r.setActivityNotes((String) row.get("activity_notes"));
             r.setOwnerNotes((String) row.get("owner_notes"));
             r.setConfidenceScore((Integer) row.get("confidence_score"));
             Object createdAtObj = row.get("created_at");
