@@ -16,6 +16,8 @@ type View = 'main' | 'edit_owner' | 'edit_pet' | 'delete';
 
 const GENDER_OPTIONS = [{ value: 'male', label: 'Male' }, { value: 'female', label: 'Female' }, { value: 'unknown', label: 'Unknown' }];
 const NEUTERED_OPTIONS = [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'Not yet' }, { value: 'unknown', label: 'Not sure' }];
+const SOURCE_OPTIONS = [{ value: 'shelter', label: 'Shelter' }, { value: 'breeder', label: 'Breeder' }, { value: 'friend_family', label: 'Friend / Family' }, { value: 'stray', label: 'Found stray' }, { value: 'other', label: 'Other' }];
+const SIBLING_OPTIONS = [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, { value: 'unsure', label: 'Not sure' }];
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -36,6 +38,8 @@ export default function ProfilePage() {
     gender: pet?.gender ?? '',
     neutered_spayed: pet?.neutered_spayed ?? '',
     breed: pet?.breed ?? '',
+    source: pet?.source ?? '',
+    sibling_bonded: pet?.sibling_bonded ?? '',
   });
 
   const showSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
@@ -65,8 +69,10 @@ export default function ProfilePage() {
         name: petForm.name,
         age_months: Number(petForm.age_months),
         gender: petForm.gender as 'male' | 'female' | 'unknown',
-        neutered_spayed: petForm.neutered_spayed as 'yes' | 'no' | 'unknown',
+        neutered_spayed: (petForm.neutered_spayed || undefined) as 'yes' | 'no' | 'unknown' | undefined,
         breed: petForm.breed || undefined,
+        source: (petForm.source || undefined) as 'shelter' | 'breeder' | 'friend_family' | 'stray' | 'other' | undefined,
+        sibling_bonded: (petForm.sibling_bonded || undefined) as 'yes' | 'no' | 'unsure' | undefined,
       });
       setPet(updated);
       showSaved();
@@ -115,13 +121,21 @@ export default function ProfilePage() {
     return (
       <>
         <TopNav title="Edit pet" onBack={() => setView('main')} />
-        <div className="px-5 pt-5">
+        <div className="px-5 pt-5 pb-8">
           <form onSubmit={handleSavePet}>
-            <Input id="pet_name" label="Kitten's name" value={petForm.name} onChange={e => setPetForm(f => ({ ...f, name: e.target.value }))} />
-            <Input id="pet_age" label="Age (months)" type="number" value={petForm.age_months} onChange={e => setPetForm(f => ({ ...f, age_months: e.target.value }))} />
-            <Input id="pet_breed" label="Breed" optional value={petForm.breed} onChange={e => setPetForm(f => ({ ...f, breed: e.target.value }))} />
+            <div className="flex gap-3">
+              <div style={{ flex: 2 }}>
+                <Input id="pet_name" label="Kitten's name" value={petForm.name} onChange={e => setPetForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Scooter" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <Input id="pet_age" label="Age (mo.)" type="number" value={petForm.age_months} onChange={e => setPetForm(f => ({ ...f, age_months: e.target.value }))} placeholder="2" hint="0 if < 1mo" />
+              </div>
+            </div>
+            <Input id="pet_breed" label="Breed" optional value={petForm.breed} onChange={e => setPetForm(f => ({ ...f, breed: e.target.value }))} placeholder="Mixed" />
             <ChipSelect label="Gender" value={petForm.gender} onChange={v => setPetForm(f => ({ ...f, gender: v }))} options={GENDER_OPTIONS} />
             <ChipSelect label="Neutered / Spayed" optional value={petForm.neutered_spayed} onChange={v => setPetForm(f => ({ ...f, neutered_spayed: v }))} options={NEUTERED_OPTIONS} />
+            <ChipSelect label="Where did you adopt from" optional value={petForm.source} onChange={v => setPetForm(f => ({ ...f, source: v }))} options={SOURCE_OPTIONS} />
+            <ChipSelect label="Did they have a sibling" optional value={petForm.sibling_bonded} onChange={v => setPetForm(f => ({ ...f, sibling_bonded: v }))} options={SIBLING_OPTIONS} />
             {error && <p className="text-[13px] text-[#e85d5d] mb-3">{error}</p>}
             <Button type="submit" fullWidth loading={saving}>Save changes</Button>
           </form>
@@ -195,7 +209,7 @@ export default function ProfilePage() {
               </div>
             </div>
             <button
-              onClick={() => { setPetForm({ name: pet.name, age_months: String(pet.age_months), gender: pet.gender, neutered_spayed: pet.neutered_spayed, breed: pet.breed ?? '' }); setView('edit_pet'); }}
+              onClick={() => { setPetForm({ name: pet.name, age_months: String(pet.age_months), gender: pet.gender, neutered_spayed: pet.neutered_spayed ?? '', breed: pet.breed ?? '', source: pet.source ?? '', sibling_bonded: pet.sibling_bonded ?? '' }); setView('edit_pet'); }}
               className="flex items-center gap-1 text-[12px] text-[#555] bg-[#f5f5f5] border-none rounded-[8px] px-3 py-1.5 cursor-pointer font-sans"
             >
               <EditIcon size={13} /> Edit
