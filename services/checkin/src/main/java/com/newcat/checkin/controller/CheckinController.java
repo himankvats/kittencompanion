@@ -31,7 +31,8 @@ public class CheckinController {
     private JWTValidator jwtValidator;
 
     private final ObjectMapper objectMapper = new ObjectMapper()
-            .findAndRegisterModules(); // handles LocalDate / LocalDateTime serialization
+            .findAndRegisterModules()
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     /**
      * Routes:
@@ -91,6 +92,8 @@ public class CheckinController {
             return response(e.getStatusCode().value(),
                     errorBody("ERROR", e.getReason(), requestId));
         } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(CheckinController.class)
+                    .error("Unhandled exception [{}]: {}", e.getClass().getSimpleName(), e.getMessage(), e);
             return response(500, errorBody("INTERNAL_SERVER_ERROR", "Internal server error", requestId));
         }
     }
