@@ -31,9 +31,11 @@ export function WeekHeatmap({ checkins }: WeekHeatmapProps) {
 
   const checkinMap = new Map(checkins.map(c => [c.date, c]));
 
+  const toLocalDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const cells = weekDays.map(d => {
-    const key = d.toISOString().slice(0, 10);
-    return checkinMap.get(key) ?? null;
+    return checkinMap.get(toLocalDate(d)) ?? null;
   });
 
   return (

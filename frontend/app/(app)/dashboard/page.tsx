@@ -10,18 +10,21 @@ import { WeekHeatmap } from '@/components/WeekHeatmap';
 import { CheckInBottomSheet } from '@/components/CheckInBottomSheet';
 import { PawIcon, HeartIcon, ClipboardIcon, AlertIcon, CheckIcon, ArrowRight, CatIcon, TrendUpIcon } from '@/components/icons';
 
+function localDateString(d = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function computeStreak(checkins: CheckIn[]): number {
   if (!checkins.length) return 0;
   const sorted = [...checkins].sort((a, b) => b.date.localeCompare(a.date));
   let streak = 0;
-  const today = new Date().toISOString().slice(0, 10);
-  let expected = today;
+  let expected = localDateString();
   for (const c of sorted) {
     if (c.date === expected) {
       streak++;
-      const d = new Date(expected);
+      const d = new Date(expected + 'T12:00:00'); // noon avoids DST edge
       d.setDate(d.getDate() - 1);
-      expected = d.toISOString().slice(0, 10);
+      expected = localDateString(d);
     } else {
       break;
     }
@@ -49,8 +52,7 @@ export default function DashboardPage() {
     if (!pet) { setDataLoading(false); return; }
     apiClient.getCheckinHistory(pet.id, { limit: 30 }).then(res => {
       setCheckins(res.checkins);
-      const today = new Date().toISOString().slice(0, 10);
-      setCheckinDone(res.checkins.some(c => c.date === today));
+      setCheckinDone(res.checkins.some(c => c.date === localDateString()));
     }).catch(() => {}).finally(() => setDataLoading(false));
   }, [pet, loading]);
 
