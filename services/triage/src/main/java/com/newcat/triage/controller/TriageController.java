@@ -30,7 +30,8 @@ import java.util.regex.Pattern;
 public class TriageController {
 
     private static final ObjectMapper mapper = new ObjectMapper()
-            .findAndRegisterModules(); // registers JavaTimeModule for LocalDateTime
+            .findAndRegisterModules()
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     private static final Pattern CONCERN_PATTERN = Pattern.compile("^/concerns/([^/]+)$");
     private static final Pattern RESOLVE_PATTERN = Pattern.compile("^/concerns/([^/]+)/resolve$");
@@ -92,6 +93,8 @@ public class TriageController {
         } catch (ResponseStatusException rse) {
             return error(rse.getStatusCode().value(), "REQUEST_ERROR", rse.getReason(), requestId);
         } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(TriageController.class)
+                    .error("Unhandled [{}]: {}", e.getClass().getSimpleName(), e.getMessage(), e);
             return error(500, "INTERNAL_ERROR", "An unexpected error occurred", requestId);
         }
     }

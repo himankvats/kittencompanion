@@ -9,7 +9,6 @@ package com.newcat.triage.service;
 import com.newcat.triage.dto.TriageRequest;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
 import java.util.Map;
 
 @Service
@@ -47,9 +46,10 @@ public class TemplateService {
             String recentChange = (String) answers.getOrDefault("recent_change", "");
             boolean recentAdoption = recentChange != null && recentChange.toLowerCase().contains("adoption");
             boolean wasSeparated = Boolean.TRUE.equals(answers.get("was_separated"));
-            @SuppressWarnings("unchecked")
-            List<String> otherSymptoms = (List<String>) answers.getOrDefault("other_symptoms", List.of());
-            boolean noOtherSymptoms = otherSymptoms == null || otherSymptoms.isEmpty();
+            Object otherSymptomsRaw = answers.get("other_symptoms");
+            boolean noOtherSymptoms = otherSymptomsRaw == null
+                    || (otherSymptomsRaw instanceof String s && s.isBlank())
+                    || (otherSymptomsRaw instanceof java.util.Collection<?> c && c.isEmpty());
             boolean shortDuration = duration == null
                     || duration.startsWith("24h")
                     || duration.startsWith("12h")
