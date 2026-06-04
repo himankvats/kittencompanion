@@ -30,6 +30,9 @@ const nextConfig = {
       { source: '/api/pets/:petId/checkins', destination: `${CHECKIN_URL}/pets/:petId/checkins` },
       { source: '/api/pets/:petId/checkins/:path*', destination: `${CHECKIN_URL}/pets/:petId/checkins/:path*` },
 
+      // Concerns by pet (/api/pets/:id/concerns  →  :8082)
+      { source: '/api/pets/:petId/concerns', destination: `${TRIAGE_URL}/pets/:petId/concerns` },
+
       // ── Checkins direct (/api/checkins  →  :8081) ────────────────
       { source: '/api/checkins', destination: `${CHECKIN_URL}/checkins` },
       { source: '/api/checkins/:path*', destination: `${CHECKIN_URL}/checkins/:path*` },

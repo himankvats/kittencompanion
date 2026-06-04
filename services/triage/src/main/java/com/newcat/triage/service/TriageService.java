@@ -196,6 +196,30 @@ public class TriageService {
     }
 
     /**
+     * Returns all concerns for a pet, verifying the caller owns it.
+     */
+    public List<TriageResponse> listConcernsForPet(String petId, String userId) {
+        // Verify pet ownership
+        String ownerSql = "SELECT user_id::text FROM pets WHERE id = CAST(? AS UUID)";
+        List<Map<String, Object>> petRows = jdbcTemplate.queryForList(ownerSql, petId);
+        if (petRows.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pet not found");
+        }
+        String petOwnerId = (String) petRows.get(0).get("user_id");
+        if (!userId.equals(petOwnerId)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You are not authorized to access this resource");
+        }
+
+        String sql = "SELECT ae.id::text, ae.pet_id::text, ae.concern_type, ae.severity, " +
+                "ae.response_text, ae.followup_resolution, ae.followup_resolved_at, ae.created_at, " +
+                "ae.template_selected, p.user_id::text as pet_owner_id " +
+                "FROM acute_events ae JOIN pets p ON p.id = ae.pet_id " +
+                "WHERE ae.pet_id = CAST(? AS UUID) ORDER BY ae.created_at DESC";
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, petId);
+        return rows.stream().map(this::mapToTriageResponse).collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
      * Applies rule-based logic to determine severity from the request directly.
      * The canonical path is via TemplateService.selectTemplate + determineSeverity.
      */

@@ -21,7 +21,7 @@ public class TriageWebController {
     @Autowired
     private TriageController triageController;
 
-    @RequestMapping(value = {"/concerns", "/concerns/{concernId}", "/concerns/{concernId}/resolve"})
+    @RequestMapping(value = {"/concerns", "/concerns/{concernId}", "/concerns/{concernId}/resolve", "/pets/{petId}/concerns"})
     public ResponseEntity<String> handle(HttpServletRequest req) throws IOException {
         APIGatewayProxyRequestEvent event = buildEvent(req);
         APIGatewayProxyResponseEvent response = triageController.handleRequest(event, localContext());

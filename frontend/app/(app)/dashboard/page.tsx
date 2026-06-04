@@ -42,6 +42,7 @@ export default function DashboardPage() {
   const { user, loading } = useAuthGuard();
   const { pet } = useAppContext();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
+  const [concernCount, setConcernCount] = useState(0);
   const [checkinDone, setCheckinDone] = useState(false);
   const [checkinFeedback, setCheckinFeedback] = useState('');
   const [showSheet, setShowSheet] = useState(false);
@@ -50,9 +51,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (loading) return;
     if (!pet) { setDataLoading(false); return; }
-    apiClient.getCheckinHistory(pet.id, { limit: 30 }).then(res => {
-      setCheckins(res.checkins);
-      setCheckinDone(res.checkins.some(c => c.date === localDateString()));
+    Promise.all([
+      apiClient.getCheckinHistory(pet.id, { limit: 30 }),
+      apiClient.listConcerns(pet.id),
+    ]).then(([checkinRes, concernRes]) => {
+      setCheckins(checkinRes.checkins);
+      setCheckinDone(checkinRes.checkins.some(c => c.date === localDateString()));
+      setConcernCount(concernRes.total);
     }).catch(() => {}).finally(() => setDataLoading(false));
   }, [pet, loading]);
 
@@ -114,7 +119,7 @@ export default function DashboardPage() {
         {[
           { label: 'Streak', value: `${streak}d`, sub: 'consecutive', icon: <HeartIcon size={14} /> },
           { label: 'Check-ins', value: String(checkins.length), sub: 'this month', icon: <ClipboardIcon size={14} /> },
-          { label: 'Concerns', value: '0', sub: 'flagged', icon: <AlertIcon size={14} />, accent: '#e85d5d' },
+          { label: 'Concerns', value: String(concernCount), sub: 'flagged', icon: <AlertIcon size={14} />, accent: '#e85d5d' },
         ].map(s => (
           <div key={s.label} className="bg-white rounded-[16px] p-[16px_18px] flex-1 min-w-0 shadow-[0_1px_8px_rgba(0,0,0,0.06)]">
             <div className="flex justify-between items-start mb-1.5">

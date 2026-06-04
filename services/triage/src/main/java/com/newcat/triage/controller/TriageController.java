@@ -35,6 +35,7 @@ public class TriageController {
 
     private static final Pattern CONCERN_PATTERN = Pattern.compile("^/concerns/([^/]+)$");
     private static final Pattern RESOLVE_PATTERN = Pattern.compile("^/concerns/([^/]+)/resolve$");
+    private static final Pattern PET_CONCERNS_PATTERN = Pattern.compile("^/pets/([^/]+)/concerns$");
 
     @Autowired
     private TriageService triageService;
@@ -64,6 +65,14 @@ public class TriageController {
                 TriageRequest req = mapper.readValue(input.getBody(), TriageRequest.class);
                 TriageResponse response = triageService.flagConcern(userId, req);
                 return ok(mapper.writeValueAsString(response));
+            }
+
+            // GET /pets/{petId}/concerns → listConcernsForPet
+            Matcher petConcernsMatcher = PET_CONCERNS_PATTERN.matcher(path);
+            if ("GET".equalsIgnoreCase(method) && petConcernsMatcher.matches()) {
+                String petId = petConcernsMatcher.group(1);
+                java.util.List<TriageResponse> concerns = triageService.listConcernsForPet(petId, userId);
+                return ok(mapper.writeValueAsString(java.util.Map.of("concerns", concerns, "total", concerns.size())));
             }
 
             // GET /concerns/{concernId} → getConcern

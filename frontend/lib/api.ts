@@ -149,6 +149,12 @@ export function getCheckinHistory(petId: string, params?: { limit?: number; offs
 // Triage APIs  →  /api/concerns  →  :8082/concerns
 // ------------------------------------------------------------------
 
+export function listConcerns(petId: string) {
+  return request<{ concerns: AcuteEvent[]; total: number }>(
+    'GET', `/api/pets/${petId}/concerns`
+  );
+}
+
 export function flagConcern(payload: {
   pet_id: string;
   concern_type: string;
@@ -182,6 +188,6 @@ export const apiClient = {
   getUser, updateUser,
   createPet, getPet, updatePet, listPets,
   createCheckin, getCheckinHistory,
-  flagConcern, resolveConcern,
+  listConcerns, flagConcern, resolveConcern,
   generateSummary,
 };
