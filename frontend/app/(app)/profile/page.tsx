@@ -44,6 +44,8 @@ export default function ProfilePage() {
 
   const showSaved = () => { setSaved(true); setTimeout(() => setSaved(false), 2000); };
 
+  const switchView = (v: View) => { setError(''); setView(v); };
+
   const handleSaveOwner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
@@ -52,7 +54,7 @@ export default function ProfilePage() {
       const updated = await apiClient.updateUser(user.id, { first_name: ownerForm.first_name, last_name: ownerForm.last_name });
       setUser(updated);
       showSaved();
-      setView('main');
+      switchView('main');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -76,7 +78,7 @@ export default function ProfilePage() {
       });
       setPet(updated);
       showSaved();
-      setView('main');
+      switchView('main');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -102,7 +104,7 @@ export default function ProfilePage() {
   if (view === 'edit_owner') {
     return (
       <>
-        <TopNav title="Edit owner" onBack={() => setView('main')} />
+        <TopNav title="Edit owner" onBack={() => switchView('main')} />
         <div className="px-5 pt-5">
           <form onSubmit={handleSaveOwner}>
             <Input id="first_name" label="First name" value={ownerForm.first_name} onChange={e => setOwnerForm(f => ({ ...f, first_name: e.target.value }))} />
@@ -120,7 +122,7 @@ export default function ProfilePage() {
   if (view === 'edit_pet') {
     return (
       <>
-        <TopNav title="Edit pet" onBack={() => setView('main')} />
+        <TopNav title="Edit pet" onBack={() => switchView('main')} />
         <div className="px-5 pt-5 pb-8">
           <form onSubmit={handleSavePet}>
             <div className="flex gap-3">
@@ -148,7 +150,7 @@ export default function ProfilePage() {
   if (view === 'delete') {
     return (
       <>
-        <TopNav title="Delete account" onBack={() => setView('main')} />
+        <TopNav title="Delete account" onBack={() => switchView('main')} />
         <div className="px-5 pt-5">
           <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[16px] p-5 mb-4">
             <p className="text-[14px] font-bold text-[#991b1b] mb-2">This action is permanent.</p>
@@ -159,7 +161,7 @@ export default function ProfilePage() {
           <Button variant="danger" fullWidth onClick={() => alert('Deletion confirmation email sent. Check your inbox.')}>
             Delete my account
           </Button>
-          <Button variant="ghost" fullWidth className="mt-2" onClick={() => setView('main')}>
+          <Button variant="ghost" fullWidth className="mt-2" onClick={() => switchView('main')}>
             Cancel
           </Button>
         </div>
@@ -189,7 +191,7 @@ export default function ProfilePage() {
             </div>
           </div>
           <button
-            onClick={() => { setOwnerForm({ first_name: user.first_name, last_name: user.last_name }); setView('edit_owner'); }}
+            onClick={() => { setOwnerForm({ first_name: user.first_name, last_name: user.last_name }); switchView('edit_owner'); }}
             className="flex items-center gap-1 text-[12px] text-[#555] bg-[#f5f5f5] border-none rounded-[8px] px-3 py-1.5 cursor-pointer font-sans"
           >
             <EditIcon size={13} /> Edit
@@ -209,7 +211,7 @@ export default function ProfilePage() {
               </div>
             </div>
             <button
-              onClick={() => { setPetForm({ name: pet.name, age_months: String(pet.age_months), gender: pet.gender, neutered_spayed: pet.neutered_spayed ?? '', breed: pet.breed ?? '', source: pet.source ?? '', sibling_bonded: pet.sibling_bonded ?? '' }); setView('edit_pet'); }}
+              onClick={() => { setPetForm({ name: pet.name, age_months: String(pet.age_months), gender: pet.gender, neutered_spayed: pet.neutered_spayed ?? '', breed: pet.breed ?? '', source: pet.source ?? '', sibling_bonded: pet.sibling_bonded ?? '' }); switchView('edit_pet'); }}
               className="flex items-center gap-1 text-[12px] text-[#555] bg-[#f5f5f5] border-none rounded-[8px] px-3 py-1.5 cursor-pointer font-sans"
             >
               <EditIcon size={13} /> Edit
@@ -233,7 +235,7 @@ export default function ProfilePage() {
           <span className="text-[14px] text-[#555]">Log out</span>
         </button>
         <button
-          onClick={() => setView('delete')}
+          onClick={() => switchView('delete')}
           className="w-full flex items-center gap-3 px-5 py-4 border-none bg-transparent text-left cursor-pointer font-sans hover:bg-[#fef9f9] transition-colors"
         >
           <TrashIcon size={16} />

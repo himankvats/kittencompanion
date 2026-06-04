@@ -43,20 +43,13 @@ export default function SummaryPage() {
 
   return (
     <div className="px-5 pt-5 pb-8">
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h2 className="text-[22px] font-extrabold text-[#111] tracking-[-0.4px] m-0">Vet Baseline Report</h2>
-          {generatedAt && (
-            <p className="text-[12px] text-[#aaa] mt-1 m-0">Generated {new Date(generatedAt).toLocaleDateString()}</p>
-          )}
-        </div>
-      </div>
+      <h2 className="text-[22px] font-extrabold text-[#111] tracking-[-0.4px] m-0 mb-4">Vet Baseline Report</h2>
 
       {error && (
         <div className="bg-[#fef2f2] border border-[#fecaca] rounded-[10px] p-3 mb-4 text-[13px] text-[#991b1b]">{error}</div>
       )}
 
-      <VetSummary htmlContent={htmlReport} />
+      <VetSummary htmlContent={htmlReport} petName={pet.name} generatedAt={generatedAt} />
 
       {/* Action footer */}
       <div className="flex gap-3 mt-5 print:hidden">
