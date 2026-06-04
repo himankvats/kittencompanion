@@ -1,5 +1,6 @@
 package com.newcat.pet.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.newcat.pet.entity.Pet;
 
 import java.time.LocalDate;
@@ -9,19 +10,43 @@ import java.util.UUID;
 public class PetResponse {
 
     private UUID id;
+
+    @JsonProperty("user_id")
     private UUID userId;
+
     private String name;
+
+    @JsonProperty("age_months")
     private Integer ageMonths;
+
     private String gender;
+
+    @JsonProperty("neutered_spayed")
     private String neuteredSpayed;
+
     private String breed;
+
+    @JsonProperty("adoption_date")
     private LocalDate adoptionDate;
+
     private String source;
+
+    @JsonProperty("sibling_bonded")
     private String siblingBonded;
+
+    @JsonProperty("medical_history")
     private String medicalHistory;
+
+    @JsonProperty("household_context")
     private String householdContext;
+
+    @JsonProperty("current_concerns")
     private String currentConcerns;
+
+    @JsonProperty("created_at")
     private LocalDateTime createdAt;
+
+    @JsonProperty("updated_at")
     private LocalDateTime updatedAt;
 
     public PetResponse() {}

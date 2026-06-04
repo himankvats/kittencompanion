@@ -28,7 +28,9 @@ import java.util.regex.Pattern;
 public class VetSummaryController {
 
     private static final Pattern PET_SUMMARIES_PATH = Pattern.compile("^/pets/([^/]+)/summaries$");
-    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper mapper = new ObjectMapper()
+            .findAndRegisterModules()
+            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @Autowired
     private VetSummaryService vetSummaryService;
@@ -82,6 +84,8 @@ public class VetSummaryController {
             String code = rse.getStatusCode().toString();
             return errorResponse(status, code, rse.getReason(), requestId);
         } catch (Exception e) {
+            org.slf4j.LoggerFactory.getLogger(VetSummaryController.class)
+                    .error("Unhandled [{}]: {}", e.getClass().getSimpleName(), e.getMessage(), e);
             return errorResponse(500, "INTERNAL_ERROR", "An unexpected error occurred", requestId);
         }
     }

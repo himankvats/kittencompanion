@@ -60,10 +60,14 @@ export const updateUserHandler = async (
 
   await RedisService.invalidate(`user:${userId}`);
 
-  await pool.query(
-    `INSERT INTO audit_logs(user_id, action, metadata) VALUES($1, $2, $3)`,
-    [userId, 'user_updated', JSON.stringify({ fields: Object.keys(updates) })]
-  );
+  try {
+    await pool.query(
+      `INSERT INTO audit_logs(user_id, action, details) VALUES($1, $2, $3::jsonb)`,
+      [userId, 'user_updated', JSON.stringify({ fields: Object.keys(updates) })]
+    );
+  } catch {
+    // audit log is non-critical — don't fail the request if it errors
+  }
 
   logger.info('User updated', { userId });
 

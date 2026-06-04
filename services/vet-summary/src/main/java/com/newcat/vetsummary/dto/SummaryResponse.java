@@ -5,6 +5,7 @@ package com.newcat.vetsummary.dto;
  * See TDD Section 2.6.1 for the full response contract including HTML report structure.
  */
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -15,13 +16,17 @@ import java.util.Map;
 @NoArgsConstructor
 public class SummaryResponse {
 
-    private String htmlReport;      // Full HTML report (TDD Section 2.6.1 HTML template)
-    private String textReport;      // Plain text equivalent
+    @JsonProperty("html_report")
+    private String htmlReport;
+
+    @JsonProperty("text_report")
+    private String textReport;
+
+    @JsonProperty("generated_at")
     private LocalDateTime generatedAt;
 
-    // Date range metadata
-    private Map<String, Object> dataRange;  // { start, end, days_since_adoption }
+    @JsonProperty("data_range")
+    private Map<String, Object> dataRange;
 
-    // Summary narrative sections
-    private Map<String, Object> summary;    // { pet_name, adoption_date, eating_summary, ... }
+    private Map<String, Object> summary;
 }
