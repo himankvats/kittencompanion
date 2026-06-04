@@ -19,6 +19,13 @@ const NEUTERED_OPTIONS = [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 
 const SOURCE_OPTIONS = [{ value: 'shelter', label: 'Shelter' }, { value: 'breeder', label: 'Breeder' }, { value: 'friend_family', label: 'Friend / Family' }, { value: 'stray', label: 'Found stray' }, { value: 'other', label: 'Other' }];
 const SIBLING_OPTIONS = [{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }, { value: 'unsure', label: 'Not sure' }];
 
+const SOURCE_LABELS: Record<string, string> = {
+  shelter: 'a shelter', breeder: 'a breeder', friend_family: 'a friend or family', stray: 'the street', other: 'another source',
+};
+const NEUTERED_LABELS: Record<string, string> = {
+  yes: 'Neutered / spayed', no: 'Not yet neutered / spayed',
+};
+
 export default function ProfilePage() {
   const router = useRouter();
   const { user, pet, setUser, setPet } = useAppContext();
@@ -218,9 +225,10 @@ export default function ProfilePage() {
             </button>
           </div>
           <div className="text-[12px] text-[#aaa] space-y-0.5">
-            {pet.adoption_date && <p className="m-0">Adopted: {new Date(pet.adoption_date).toLocaleDateString()}</p>}
-            {pet.source && <p className="m-0">Source: {pet.source.replace('_', ' ')}</p>}
-            <p className="m-0">Neutered/spayed: {pet.neutered_spayed}</p>
+            {pet.adoption_date && <p className="m-0">Adopted {new Date(pet.adoption_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>}
+            {pet.source && <p className="m-0">Adopted from {SOURCE_LABELS[pet.source] ?? pet.source}</p>}
+            {pet.neutered_spayed && pet.neutered_spayed !== 'unknown' && <p className="m-0">{NEUTERED_LABELS[pet.neutered_spayed] ?? pet.neutered_spayed}</p>}
+            {pet.sibling_bonded && pet.sibling_bonded !== 'unsure' && <p className="m-0">{pet.sibling_bonded === 'yes' ? 'Had a bonded sibling' : 'No bonded sibling'}</p>}
           </div>
         </div>
       )}
