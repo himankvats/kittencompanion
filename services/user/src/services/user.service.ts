@@ -9,21 +9,54 @@ import { logger } from '../utils/logger';
 import type { User, UpdateUserRequest } from '../types/user.types';
 
 export class UserService {
-  // TODO: Implement getUserById (TDD Section 2.2.1)
   static async getUserById(userId: string): Promise<User | null> {
-    throw new Error('Not implemented - see TDD Section 2.2.1');
+    const result = await pool.query<User>(
+      'SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL',
+      [userId]
+    );
+    return result.rows[0] ?? null;
   }
 
-  // TODO: Implement updateUser (TDD Section 2.2.2)
-  // Updates first_name, last_name, notification_preferences
   static async updateUser(userId: string, updates: UpdateUserRequest): Promise<User> {
-    throw new Error('Not implemented - see TDD Section 2.2.2');
+    const setClauses: string[] = ['updated_at = NOW()'];
+    const values: unknown[] = [userId];
+    let idx = 2;
+
+    if (updates.first_name !== undefined) {
+      setClauses.push(`first_name = $${idx++}`);
+      values.push(updates.first_name);
+    }
+    if (updates.last_name !== undefined) {
+      setClauses.push(`last_name = $${idx++}`);
+      values.push(updates.last_name);
+    }
+    if (updates.notification_preferences !== undefined) {
+      // Merge into existing JSONB rather than replacing it entirely
+      setClauses.push(`notification_preferences = notification_preferences || $${idx++}::jsonb`);
+      values.push(JSON.stringify(updates.notification_preferences));
+    }
+
+    const query = `
+      UPDATE users
+      SET ${setClauses.join(', ')}
+      WHERE id = $1 AND deleted_at IS NULL
+      RETURNING *
+    `;
+
+    const result = await pool.query<User>(query, values);
+
+    if (result.rows.length === 0) {
+      const { CustomError } = await import('../utils/errors');
+      throw new CustomError(404, 'USER_NOT_FOUND', 'User not found');
+    }
+
+    logger.info('User updated', { userId });
+    return result.rows[0];
   }
 
-  // TODO: Implement deleteUser (TDD Section 2.2.4)
-  // Hard deletes user row; ON DELETE CASCADE handles pets, checkins, etc.
   static async deleteUser(userId: string): Promise<void> {
-    throw new Error('Not implemented - see TDD Section 2.2.4');
+    await pool.query('DELETE FROM users WHERE id = $1', [userId]);
+    logger.info('User hard-deleted', { userId });
   }
 }
 

@@ -18,9 +18,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,8 +37,8 @@ class PetServiceTest {
     @InjectMocks
     private PetService petService;
 
-    // TODO: Add test fixtures (TDD Section 7.1)
     private PetRequest validRequest;
+    private final String userId = UUID.randomUUID().toString();
 
     @BeforeEach
     void setUp() {
@@ -47,50 +49,101 @@ class PetServiceTest {
         validRequest.setNeuteredSpayed("unknown");
     }
 
-    // TODO: Implement createPet tests (TDD Section 7.1)
-
     @Test
     void testCreatePetSuccess() {
-        // TODO: Implement (TDD Section 7.1)
-        // Arrange: mock petRepository.save, redisService.setWithTTL
-        // Act: call petService.createPet
-        // Assert: response fields, verify mock interactions
+        Pet saved = new Pet();
+        saved.setId(UUID.randomUUID());
+        saved.setUserId(UUID.fromString(userId));
+        saved.setName("Scooter");
+        saved.setAgeMonths(2);
+        saved.setGender("male");
+        saved.setNeuteredSpayed("unknown");
+
+        when(petRepository.save(any(Pet.class))).thenReturn(saved);
+        when(redisService.setWithTTL(anyString(), any(), anyInt())).thenReturn(true);
+
+        PetResponse response = petService.createPet(userId, validRequest);
+
+        assertNotNull(response);
+        assertEquals("Scooter", response.getName());
+        assertEquals(2, response.getAgeMonths());
+        verify(petRepository, times(1)).save(any(Pet.class));
+        verify(redisService, times(1)).setWithTTL(eq("pet:" + saved.getId()), any(), eq(300));
     }
 
     @Test
     void testCreatePetValidationFailure_emptyName() {
-        // TODO: Implement (TDD Section 7.1)
-        // Arrange: request with empty name
-        // Assert: throws IllegalArgumentException
+        validRequest.setName("");
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> petService.createPet(userId, validRequest)
+        );
+        assertTrue(ex.getMessage().contains("name"));
     }
 
     @Test
     void testCreatePetValidationFailure_invalidAgeMonths() {
-        // TODO: Implement (TDD Section 7.1)
-        // Arrange: request with age_months = 400
-        // Assert: throws IllegalArgumentException
+        validRequest.setAgeMonths(400);
+        IllegalArgumentException ex = assertThrows(
+                IllegalArgumentException.class,
+                () -> petService.createPet(userId, validRequest)
+        );
+        assertTrue(ex.getMessage().contains("age_months"));
     }
-
-    // TODO: Implement getPet tests
 
     @Test
     void testGetPetCacheHit() {
-        // TODO: Implement (TDD Section 7.1)
-        // Arrange: mock redisService.get returns Optional.of(pet)
-        // Assert: petRepository.findById never called
+        String petId = UUID.randomUUID().toString();
+        Pet pet = new Pet();
+        pet.setId(UUID.fromString(petId));
+        pet.setUserId(UUID.fromString(userId));
+        pet.setName("Scooter");
+        pet.setAgeMonths(2);
+
+        when(redisService.get("pet:" + petId, Pet.class)).thenReturn(Optional.of(pet));
+
+        PetResponse response = petService.getPet(petId, userId);
+
+        assertNotNull(response);
+        assertEquals("Scooter", response.getName());
+        verify(petRepository, never()).findById(any(UUID.class));
     }
 
     @Test
     void testGetPetCacheMiss_queriesDB() {
-        // TODO: Implement (TDD Section 7.1)
-        // Arrange: mock redisService.get returns empty; mock petRepository.findById returns pet
-        // Assert: redisService.setWithTTL called to cache result
+        String petId = UUID.randomUUID().toString();
+        Pet pet = new Pet();
+        pet.setId(UUID.fromString(petId));
+        pet.setUserId(UUID.fromString(userId));
+        pet.setName("Scooter");
+        pet.setAgeMonths(2);
+
+        when(redisService.get("pet:" + petId, Pet.class)).thenReturn(Optional.empty());
+        when(petRepository.findById(UUID.fromString(petId))).thenReturn(Optional.of(pet));
+        when(redisService.setWithTTL(anyString(), any(), anyInt())).thenReturn(true);
+
+        PetResponse response = petService.getPet(petId, userId);
+
+        assertNotNull(response);
+        verify(petRepository, times(1)).findById(UUID.fromString(petId));
+        verify(redisService, times(1)).setWithTTL(eq("pet:" + petId), any(), eq(300));
     }
 
     @Test
     void testGetPetForbidden_wrongUser() {
-        // TODO: Implement (TDD Section 7.1)
-        // Arrange: pet exists but belongs to different user
-        // Assert: throws RuntimeException("FORBIDDEN")
+        String petId = UUID.randomUUID().toString();
+        String otherUserId = UUID.randomUUID().toString();
+        Pet pet = new Pet();
+        pet.setId(UUID.fromString(petId));
+        pet.setUserId(UUID.fromString(otherUserId));
+
+        when(redisService.get("pet:" + petId, Pet.class)).thenReturn(Optional.empty());
+        when(petRepository.findById(UUID.fromString(petId))).thenReturn(Optional.of(pet));
+
+        RuntimeException ex = assertThrows(
+                RuntimeException.class,
+                () -> petService.getPet(petId, userId)
+        );
+        assertEquals("FORBIDDEN", ex.getMessage());
     }
 }

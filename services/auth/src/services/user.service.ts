@@ -9,22 +9,21 @@ import { logger } from '../utils/logger';
 import type { User } from '../types/auth.types';
 
 export class UserService {
-  // TODO: Implement getUserByEmail (TDD Section 3.1)
-  // Query: SELECT * FROM users WHERE email = $1 AND deleted_at IS NULL
-  // Returns null if user does not exist
   static async getUserByEmail(email: string): Promise<User | null> {
-    throw new Error('Not implemented - see TDD Section 3.1');
+    const result = await pool.query<User>(
+      'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND deleted_at IS NULL',
+      [email.toLowerCase()]
+    );
+    return result.rows[0] ?? null;
   }
 
-  // TODO: Implement createUser (TDD Section 2.1.2)
-  // Inserts a new row into users table with default notification_preferences
-  // Returns the created User object
-  static async createUser(
-    email: string,
-    firstName: string,
-    lastName: string
-  ): Promise<User> {
-    throw new Error('Not implemented - see TDD Section 2.1.2');
+  static async createUser(email: string, firstName: string, lastName: string): Promise<User> {
+    const result = await pool.query<User>(
+      'INSERT INTO users(email, first_name, last_name) VALUES($1, $2, $3) RETURNING *',
+      [email.toLowerCase(), firstName, lastName]
+    );
+    logger.info('User created', { email });
+    return result.rows[0];
   }
 }
 

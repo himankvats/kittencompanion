@@ -7,28 +7,28 @@
 import crypto from 'crypto';
 
 export class OTPService {
-  // TODO: Implement generateOTP (TDD Section 3.1)
-  // Returns a 6-digit zero-padded numeric string (e.g., "042371")
   static generateOTP(): string {
-    throw new Error('Not implemented - see TDD Section 3.1');
+    return crypto.randomInt(0, 1_000_000).toString().padStart(6, '0');
   }
 
-  // TODO: Implement hashOTP (TDD Section 3.1)
-  // Uses PBKDF2 with random 32-byte salt; returns "<saltHex>:<hashHex>"
   static hashOTP(otp: string): string {
-    throw new Error('Not implemented - see TDD Section 3.1');
+    const salt = crypto.randomBytes(32);
+    const hash = crypto.pbkdf2Sync(otp, salt, 10_000, 64, 'sha256');
+    return `${salt.toString('hex')}:${hash.toString('hex')}`;
   }
 
-  // TODO: Implement verifyOTP (TDD Section 3.1)
-  // Splits stored hash, re-derives hash, and compares with constant-time comparison
+  // storedHash format: "<saltHex>:<hashHex>"
   static verifyOTP(storedHash: string, providedOTP: string): boolean {
-    throw new Error('Not implemented - see TDD Section 3.1');
+    const [saltHex, hashHex] = storedHash.split(':');
+    if (!saltHex || !hashHex) return false;
+    const salt = Buffer.from(saltHex, 'hex');
+    const expectedHash = Buffer.from(hashHex, 'hex');
+    const actualHash = crypto.pbkdf2Sync(providedOTP, salt, 10_000, 64, 'sha256');
+    return crypto.timingSafeEqual(expectedHash, actualHash);
   }
 
-  // TODO: Implement isOTPExpired (TDD Section 3.1)
-  // Returns true if the current time is past the given expiry timestamp
   static isOTPExpired(expiresAt: Date): boolean {
-    throw new Error('Not implemented - see TDD Section 3.1');
+    return Date.now() > expiresAt.getTime();
   }
 }
 

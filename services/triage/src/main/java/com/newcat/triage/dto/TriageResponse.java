@@ -4,11 +4,11 @@ package com.newcat.triage.dto;
  * Response DTO for triage endpoints. See TDD Section 2.5.1 for full response contract.
  */
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.Map;
 import java.util.UUID;
 
 @Data
@@ -16,19 +16,27 @@ import java.util.UUID;
 public class TriageResponse {
 
     private UUID id;
-    private UUID petId;
-    private String concernType;
-    private String severity;          // manage_at_home | watch | call_vet_now
-    private String severityLabel;     // human-readable label
 
-    // Claude-generated guidance text
+    @JsonProperty("pet_id")
+    private UUID petId;
+
+    @JsonProperty("concern_type")
+    private String concernType;
+
+    private String severity;
+
+    @JsonProperty("severity_label")
+    private String severityLabel;
+
+    @JsonProperty("response_text")
     private String responseText;
 
-    // Escalation guidance — TDD Section 2.5.1
-    private Map<String, Object> escalationMarkers;
-
-    private LocalDateTime followupPromptAt;
+    @JsonProperty("followup_resolution")
     private String followupResolution;
+
+    @JsonProperty("followup_resolved_at")
     private LocalDateTime followupResolvedAt;
+
+    @JsonProperty("created_at")
     private LocalDateTime createdAt;
 }

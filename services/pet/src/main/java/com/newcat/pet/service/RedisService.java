@@ -25,27 +25,35 @@ public class RedisService {
     private static final Logger logger = new Logger(RedisService.class);
     private static final Duration DEFAULT_TTL = Duration.ofMinutes(5);
 
-    /**
-     * TODO: Implement get (TDD Section 5.1)
-     * Fetches JSON-serialised value from Redis; returns empty Optional on miss.
-     */
     public <T> Optional<T> get(String key, Class<T> type) {
-        throw new UnsupportedOperationException("Not implemented - see TDD Section 5.1");
+        try {
+            String value = redisTemplate.opsForValue().get(key);
+            if (value == null) {
+                return Optional.empty();
+            }
+            return Optional.of(mapper.readValue(value, type));
+        } catch (Exception e) {
+            logger.error("Redis get failed", e, "key", key);
+            return Optional.empty();
+        }
     }
 
-    /**
-     * TODO: Implement setWithTTL (TDD Section 5.1)
-     * Serialises value to JSON and stores with given TTL in seconds.
-     */
     public boolean setWithTTL(String key, Object value, int ttlSeconds) {
-        throw new UnsupportedOperationException("Not implemented - see TDD Section 5.1");
+        try {
+            String json = mapper.writeValueAsString(value);
+            redisTemplate.opsForValue().set(key, json, Duration.ofSeconds(ttlSeconds));
+            return true;
+        } catch (Exception e) {
+            logger.error("Redis set failed", e, "key", key);
+            return false;
+        }
     }
 
-    /**
-     * TODO: Implement delete (TDD Section 5.1)
-     * Removes the key from Redis (cache invalidation).
-     */
     public void delete(String key) {
-        throw new UnsupportedOperationException("Not implemented - see TDD Section 5.1");
+        try {
+            redisTemplate.delete(key);
+        } catch (Exception e) {
+            logger.error("Redis delete failed", e, "key", key);
+        }
     }
 }

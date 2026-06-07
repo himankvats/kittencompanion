@@ -14,16 +14,13 @@ import com.newcat.checkin.controller.CheckinController;
 import org.springframework.boot.SpringApplication;
 import org.springframework.context.ApplicationContext;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class CheckinLambda implements RequestHandler<APIGatewayProxyRequestEvent, APIGatewayProxyResponseEvent> {
 
     private static ApplicationContext springContext;
 
     @Override
     public APIGatewayProxyResponseEvent handleRequest(APIGatewayProxyRequestEvent input, Context context) {
-        // TODO: Implement Spring context bootstrap and delegation (TDD Section 3.4)
+        // Bootstrap Spring on first cold start; reuse the context on warm invocations.
         if (CheckinLambda.springContext == null) {
             CheckinLambda.springContext = SpringApplication.run(CheckinApplication.class);
         }

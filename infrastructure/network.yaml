@@ -1,0 +1,433 @@
+# infrastructure/network.yaml
+# Foundational prod infrastructure for Kitten Companion, as Infrastructure-as-Code.
+# Deployed as its OWN stack (kitten-companion-network-<env>), separate from the
+# application stack (template.yaml) because VPC/RDS/ElastiCache are stateful,
+# expensive, and rarely change — coupling them to per-commit Lambda deploys would
+# risk the database on every code push.
+#
+# Creates: VPC, public+private subnets across 2 AZs, IGW, NAT gateway, security
+# groups, RDS PostgreSQL, ElastiCache Redis, 4 SQS queues (each with a DLQ).
+# Publishes endpoints/IDs to SSM Parameter Store so deploy.sh/migrate.sh and the
+# Jenkins pipeline can resolve them without hardcoding.
+#
+# PREREQUISITE: the db-credentials secret must already exist (the RDS master
+# password is resolved from it). See PROD_DEPLOYMENT.md Phase 1.
+#
+# Deploy:
+#   aws cloudformation deploy \
+#     --template-file infrastructure/network.yaml \
+#     --stack-name kitten-companion-network-prod \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides Environment=prod JenkinsIngressCidr=<your.ip>/32
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Kitten Companion — network + data layer (VPC, RDS, ElastiCache, SQS)
+
+# ------------------------------------------------------------------
+# Parameters
+# ------------------------------------------------------------------
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment (drives all resource names)
+
+  VpcCidr:
+    Type: String
+    Default: 10.1.0.0/16
+    Description: CIDR for the VPC (10.1.0.0/16 for prod avoids overlap with dev)
+
+  DbInstanceClass:
+    Type: String
+    Default: db.t3.small
+    Description: RDS instance class
+
+  DbAllocatedStorage:
+    Type: Number
+    Default: 20
+    Description: RDS allocated storage in GB
+
+  CacheNodeType:
+    Type: String
+    Default: cache.t3.micro
+    Description: ElastiCache node type
+
+  JenkinsIngressCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to reach Jenkins (22/8080). SET THIS to your IP/32.
+
+# ------------------------------------------------------------------
+# Mappings — two AZs in us-east-1
+# ------------------------------------------------------------------
+Mappings:
+  Subnets:
+    Public1:  { Cidr: 10.1.0.0/24 }
+    Public2:  { Cidr: 10.1.1.0/24 }
+    Private1: { Cidr: 10.1.10.0/24 }
+    Private2: { Cidr: 10.1.11.0/24 }
+
+# ------------------------------------------------------------------
+# Resources
+# ------------------------------------------------------------------
+Resources:
+
+  # ---- VPC ----
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-vpc' }
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-igw' }
+
+  IgwAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # ---- Subnets ----
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !FindInMap [Subnets, Public1, Cidr]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-public-1' }
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !FindInMap [Subnets, Public2, Cidr]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-public-2' }
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [0, !GetAZs '']
+      CidrBlock: !FindInMap [Subnets, Private1, Cidr]
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-private-1' }
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      AvailabilityZone: !Select [1, !GetAZs '']
+      CidrBlock: !FindInMap [Subnets, Private2, Cidr]
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-private-2' }
+
+  # ---- Public routing ----
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-public-rt' }
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: IgwAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnet1, RouteTableId: !Ref PublicRouteTable }
+  PublicSubnet2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PublicSubnet2, RouteTableId: !Ref PublicRouteTable }
+
+  # ---- NAT gateway (single AZ to control cost) ----
+  NatEip:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref PublicSubnet1
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-nat' }
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-private-rt' }
+
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateSubnet1, RouteTableId: !Ref PrivateRouteTable }
+  PrivateSubnet2RtAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref PrivateSubnet2, RouteTableId: !Ref PrivateRouteTable }
+
+  # ---- Security groups ----
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Lambda SG (${Environment}) — egress only'
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - { IpProtocol: -1, CidrIp: 0.0.0.0/0, Description: All outbound (Bedrock/SendGrid/AWS via NAT) }
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-lambda-sg' }
+
+  JenkinsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Jenkins SG (${Environment}) — UI + SSH from operator'
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 22,   ToPort: 22,   CidrIp: !Ref JenkinsIngressCidr, Description: SSH }
+        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, CidrIp: !Ref JenkinsIngressCidr, Description: Jenkins UI }
+      SecurityGroupEgress:
+        - { IpProtocol: -1, CidrIp: 0.0.0.0/0, Description: All outbound }
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-jenkins-sg' }
+
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'RDS SG (${Environment}) — Postgres from Lambda + Jenkins'
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-rds-sg' }
+
+  # Ingress as separate resources to avoid circular SG references.
+  RdsIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RdsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+      Description: Postgres from Lambdas
+
+  RdsIngressFromJenkins:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RdsSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref JenkinsSecurityGroup
+      Description: Postgres from in-VPC Jenkins (migrations — no bastion needed)
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub 'Redis SG (${Environment}) — from Lambda'
+      VpcId: !Ref Vpc
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-redis-sg' }
+
+  RedisIngressFromLambda:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref RedisSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+      Description: Redis from Lambdas
+
+  # ---- RDS PostgreSQL ----
+  DbSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub 'kitten-companion ${Environment} private subnets'
+      SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}-db-subnets' }
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub 'kitten-companion-${Environment}'
+      Engine: postgres
+      EngineVersion: '15'
+      DBInstanceClass: !Ref DbInstanceClass
+      AllocatedStorage: !Ref DbAllocatedStorage
+      DBName: !Sub 'newcat_${Environment}'
+      MasterUsername: kittenapp
+      MasterUserPassword: !Sub '{{resolve:secretsmanager:kitten-companion/${Environment}/db-credentials:SecretString:password}}'
+      DBSubnetGroupName: !Ref DbSubnetGroup
+      VPCSecurityGroups: [!Ref RdsSecurityGroup]
+      MultiAZ: !If [IsProd, true, false]
+      StorageEncrypted: true
+      PubliclyAccessible: false
+      BackupRetentionPeriod: !If [IsProd, 7, 1]
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-${Environment}' }
+
+  # ---- ElastiCache Redis ----
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: !Sub 'kitten-companion ${Environment} private subnets'
+      SubnetIds: [!Ref PrivateSubnet1, !Ref PrivateSubnet2]
+
+  Cache:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      ClusterName: !Sub 'kitten-companion-${Environment}'
+      Engine: redis
+      EngineVersion: '7.1'
+      CacheNodeType: !Ref CacheNodeType
+      NumCacheNodes: 1
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      VpcSecurityGroupIds: [!Ref RedisSecurityGroup]
+
+  # ---- SQS queues (each with a dead-letter queue) ----
+  PatternDetectionDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-pattern-detection-${Environment}-dlq'
+      MessageRetentionPeriod: 1209600
+  PatternDetectionQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-pattern-detection-${Environment}'
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt PatternDetectionDLQ.Arn
+        maxReceiveCount: 5
+
+  TriageFollowupDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-triage-followup-${Environment}-dlq'
+      MessageRetentionPeriod: 1209600
+  TriageFollowupQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-triage-followup-${Environment}'
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt TriageFollowupDLQ.Arn
+        maxReceiveCount: 5
+
+  AsyncLlmDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-async-llm-${Environment}-dlq'
+      MessageRetentionPeriod: 1209600
+  AsyncLlmQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-async-llm-${Environment}'
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt AsyncLlmDLQ.Arn
+        maxReceiveCount: 5
+
+  NotificationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-notification-${Environment}-dlq'
+      MessageRetentionPeriod: 1209600
+  NotificationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub 'kitten-notification-${Environment}'
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt NotificationDLQ.Arn
+        maxReceiveCount: 5
+
+  # ---- SSM parameters (consumed by deploy.sh / migrate.sh) ----
+  SsmRdsHost:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/kitten-companion/${Environment}/rds-host'
+      Type: String
+      Value: !GetAtt Database.Endpoint.Address
+  SsmRedisHost:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/kitten-companion/${Environment}/redis-host'
+      Type: String
+      Value: !GetAtt Cache.RedisEndpoint.Address
+  SsmLambdaSg:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/kitten-companion/${Environment}/lambda-sg'
+      Type: String
+      Value: !Ref LambdaSecurityGroup
+  SsmPrivateSubnet1:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/kitten-companion/${Environment}/private-subnet-1'
+      Type: String
+      Value: !Ref PrivateSubnet1
+  SsmPrivateSubnet2:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Sub '/kitten-companion/${Environment}/private-subnet-2'
+      Type: String
+      Value: !Ref PrivateSubnet2
+
+# ------------------------------------------------------------------
+# Conditions
+# ------------------------------------------------------------------
+Conditions:
+  IsProd: !Equals [!Ref Environment, prod]
+
+# ------------------------------------------------------------------
+# Outputs (exported for the Jenkins stack to import)
+# ------------------------------------------------------------------
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub 'kitten-companion-${Environment}-VpcId' }
+  PublicSubnet1Id:
+    Value: !Ref PublicSubnet1
+    Export: { Name: !Sub 'kitten-companion-${Environment}-PublicSubnet1Id' }
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+    Export: { Name: !Sub 'kitten-companion-${Environment}-PrivateSubnet1Id' }
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
+    Export: { Name: !Sub 'kitten-companion-${Environment}-PrivateSubnet2Id' }
+  LambdaSecurityGroupId:
+    Value: !Ref LambdaSecurityGroup
+    Export: { Name: !Sub 'kitten-companion-${Environment}-LambdaSecurityGroupId' }
+  JenkinsSecurityGroupId:
+    Value: !Ref JenkinsSecurityGroup
+    Export: { Name: !Sub 'kitten-companion-${Environment}-JenkinsSecurityGroupId' }
+  RdsEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+    Export: { Name: !Sub 'kitten-companion-${Environment}-RdsEndpoint' }
+  RedisEndpoint:
+    Value: !GetAtt Cache.RedisEndpoint.Address
+    Export: { Name: !Sub 'kitten-companion-${Environment}-RedisEndpoint' }

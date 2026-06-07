@@ -4,6 +4,7 @@ package com.newcat.triage.dto;
  * Request DTO for POST /concerns. See TDD Section 2.5.1 for field specification.
  */
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -16,9 +17,11 @@ import java.util.Map;
 @NoArgsConstructor
 public class TriageRequest {
 
+    @JsonProperty("pet_id")
     @NotNull(message = "pet_id is required")
     private String petId;
 
+    @JsonProperty("concern_type")
     @NotBlank(message = "concern_type is required")
     @Pattern(
         regexp = "not_eating|vomiting|litter_problems|respiratory|limping|hiding|eye_ear|skin|other",
@@ -26,7 +29,6 @@ public class TriageRequest {
     )
     private String concernType;
 
-    // Dynamic structure varies per concern_type — see TDD Section 1.5
-    @NotNull(message = "followup_answers is required")
+    @JsonProperty("followup_answers")
     private Map<String, Object> followupAnswers;
 }

@@ -4,24 +4,34 @@
  * See TDD Section 3.1 for notification flow.
  */
 
-import { SQSRecord, Context } from 'aws-lambda';
+import { SQSRecord } from 'aws-lambda';
 import { SendGridService } from '../services/sendgrid.service';
-import { TemplateService } from '../services/template.service';
+import { TemplateService, TemplateId } from '../services/template.service';
+import { QueueService } from '../services/queue.service';
 
 export interface EmailPayload {
   to: string;
-  templateId: string;     // reminder | otp | digest
+  templateId: TemplateId;
   templateData: Record<string, unknown>;
 }
 
-// TODO: Implement sendEmailHandler (TDD Section 3.1)
-// Steps:
-//   1. Parse SQS record body as EmailPayload
-//   2. Build email from TemplateService.getTemplate(templateId, templateData)
-//   3. Send via SendGridService.sendEmail
-//   4. Handle failures gracefully (do not throw — log and continue)
 export async function sendEmailHandler(record: SQSRecord): Promise<void> {
-  throw new Error('Not implemented - see TDD Section 3.1');
+  try {
+    const payload = QueueService.parseMessage<EmailPayload>(record.body);
+    const { subject, htmlContent, textContent } = TemplateService.getTemplate(
+      payload.templateId,
+      payload.templateData
+    );
+    await SendGridService.sendEmail(payload.to, subject, htmlContent, textContent);
+  } catch (err) {
+    console.error(JSON.stringify({
+      level: 'ERROR',
+      message: 'Failed to send email',
+      error: String(err),
+      messageId: record.messageId,
+    }));
+    // Do NOT re-throw — SQS retry policy handles retries
+  }
 }
 
 export default sendEmailHandler;

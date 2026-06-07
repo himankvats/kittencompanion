@@ -8,10 +8,19 @@ module.exports = {
   ],
   theme: {
     extend: {
-      // TODO: Add custom brand colours, fonts, and spacing as needed
       colors: {
-        primary: '#4F46E5',   // indigo-600
-        secondary: '#F59E0B', // amber-500
+        primary: '#111111',
+        flag: '#e85d5d',
+        success: '#22c55e',
+        tip: '#f59e0b',
+      },
+      fontFamily: {
+        sans: ['DM Sans', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+      },
+      borderRadius: {
+        chip: '8px',
+        card: '16px',
+        modal: '20px',
       },
     },
   },

@@ -4,27 +4,37 @@
  * See TDD Section 3.1 for JWT payload specification and expiry rules.
  */
 
-import jwt from 'jsonwebtoken';
+import jwt, { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 import { getSecret } from '../config/secrets';
 import { logger } from '../utils/logger';
+import { CustomError } from '../utils/errors';
 import type { JWTPayload } from '../types/auth.types';
 
 export class JWTService {
-  // TODO: Implement generateJWT (TDD Section 3.1)
-  // Algorithm: HS256
-  // Payload: { sub: userId, email, iat, exp, type: "user" }
-  // Expiry: 7 days (604800 seconds)
-  // Secret: retrieved from AWS Secrets Manager key "jwt-secret"
   static async generateJWT(userId: string, email: string): Promise<string> {
-    throw new Error('Not implemented - see TDD Section 3.1');
+    const secret = await getSecret('jwt-secret');
+    const expiresIn = parseInt(process.env.JWT_EXPIRY ?? '604800', 10);
+    return jwt.sign(
+      { sub: userId, email, type: 'user' },
+      secret,
+      { algorithm: 'HS256', expiresIn }
+    );
   }
 
-  // TODO: Implement verifyJWT (TDD Section 3.1)
-  // Verifies algorithm (HS256), issuer, and audience
-  // Throws CustomError(401, "INVALID_TOKEN") on failure
-  // Throws CustomError(401, "TOKEN_EXPIRED") when token is past expiry
   static async verifyJWT(token: string): Promise<JWTPayload> {
-    throw new Error('Not implemented - see TDD Section 3.1');
+    const secret = await getSecret('jwt-secret');
+    try {
+      return jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTPayload;
+    } catch (err) {
+      if (err instanceof TokenExpiredError) {
+        logger.info('JWT expired', { token: token.slice(0, 20) });
+        throw new CustomError(401, 'TOKEN_EXPIRED', 'Token has expired');
+      }
+      if (err instanceof JsonWebTokenError) {
+        throw new CustomError(401, 'INVALID_TOKEN', 'Token is invalid');
+      }
+      throw err;
+    }
   }
 }
 

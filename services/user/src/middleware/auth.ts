@@ -5,26 +5,50 @@
  */
 
 import { APIGatewayProxyEvent } from 'aws-lambda';
+import jwt, { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
+import { getSecret } from '../config/secrets';
+import { redis } from '../services/redis.service';
 import { CustomError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import type { JWTClaims } from '../types/user.types';
 
-// TODO: Implement validateJWT (TDD Section 11.2)
-// Steps:
-//   1. Extract Authorization header value
-//   2. Strip "Bearer " prefix
-//   3. Verify HS256 signature using JWT_SECRET from Secrets Manager
-//   4. Check token exists in Redis (not logged out)
-//   5. Return decoded claims { sub, email }
-//   6. Throw CustomError(401, "UNAUTHORIZED") on any failure
 export async function validateJWT(event: APIGatewayProxyEvent): Promise<JWTClaims> {
-  throw new Error('Not implemented - see TDD Section 11.2');
+  const authHeader = event.headers?.Authorization ?? event.headers?.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new CustomError(401, 'UNAUTHORIZED', 'Missing or malformed Authorization header');
+  }
+
+  const token = authHeader.slice(7);
+
+  let claims: JWTClaims;
+  try {
+    const secret = await getSecret('jwt-secret');
+    claims = jwt.verify(token, secret, { algorithms: ['HS256'] }) as JWTClaims;
+  } catch (err) {
+    if (err instanceof TokenExpiredError) {
+      logger.info('JWT expired', { token: token.slice(0, 20) });
+      throw new CustomError(401, 'TOKEN_EXPIRED', 'Token has expired');
+    }
+    if (err instanceof JsonWebTokenError) {
+      throw new CustomError(401, 'INVALID_TOKEN', 'Token is invalid');
+    }
+    throw err;
+  }
+
+  // Ensure the token hasn't been revoked (e.g. via logout)
+  const activeKey = `jwt:active:${token}`;
+  const isActive = await redis.get(activeKey);
+  if (!isActive) {
+    throw new CustomError(401, 'TOKEN_REVOKED', 'Token has been revoked');
+  }
+
+  return claims;
 }
 
-// TODO: Implement verifyOwnership (TDD Section 11.2)
-// Throws 403 FORBIDDEN if jwtUserId does not match resourceOwnerId
 export function verifyOwnership(jwtUserId: string, resourceOwnerId: string): void {
-  throw new Error('Not implemented - see TDD Section 11.2');
+  if (jwtUserId !== resourceOwnerId) {
+    throw new CustomError(403, 'FORBIDDEN', 'You are not authorized to access this resource');
+  }
 }
 
 export default validateJWT;

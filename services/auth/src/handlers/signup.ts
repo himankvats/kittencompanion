@@ -14,20 +14,58 @@ import { logger } from '../utils/logger';
 import { pool } from '../config/database';
 import type { SignupRequest } from '../types/auth.types';
 
-// TODO: Implement signupHandler (TDD Section 2.1.1)
-// Steps:
-//   1. Parse and validate request body (email, first_name, last_name)
-//   2. Check if email is already registered via UserService.getUserByEmail
-//   3. Generate 6-digit OTP via OTPService.generateOTP
-//   4. Hash OTP via OTPService.hashOTP (never store plaintext)
-//   5. Insert into otp_tokens table with 24h expiry
-//   6. Send OTP email via EmailService.sendOTPEmail
-//   7. Return 200 with { message, email, expires_in_seconds: 86400 }
 export const signupHandler = async (
   event: APIGatewayProxyEvent,
   _context: Context
 ): Promise<APIGatewayProxyResult> => {
-  throw new Error('Not implemented - see TDD Section 2.1.1');
+  let body: SignupRequest;
+  try {
+    body = JSON.parse(event.body ?? '{}') as SignupRequest;
+  } catch {
+    throw new CustomError(400, 'INVALID_JSON', 'Request body must be valid JSON');
+  }
+
+  const { first_name, last_name } = body;
+  const email = (body.email ?? '').toLowerCase().trim();
+
+  if (!email || !validateEmail(email)) {
+    throw new CustomError(400, 'INVALID_EMAIL', 'Email format is invalid');
+  }
+  if (!first_name || !validateName(first_name)) {
+    throw new CustomError(400, 'INVALID_NAME', 'first_name must be 1-100 chars, letters/hyphens/apostrophes only');
+  }
+  if (!last_name || !validateName(last_name)) {
+    throw new CustomError(400, 'INVALID_NAME', 'last_name must be 1-100 chars, letters/hyphens/apostrophes only');
+  }
+
+  const existing = await UserService.getUserByEmail(email);
+  if (existing) {
+    throw new CustomError(409, 'EMAIL_ALREADY_REGISTERED', 'This email is already registered. Use /auth/login instead.');
+  }
+
+  const otp = OTPService.generateOTP();
+  const tokenHash = OTPService.hashOTP(otp);
+  const expiryMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES ?? '1440', 10);
+
+  await pool.query(
+    `INSERT INTO otp_tokens(email, first_name, last_name, token_hash, otp_code, expires_at)
+     VALUES($1, $2, $3, $4, $5, NOW() + ($6 || ' minutes')::INTERVAL)`,
+    [email, first_name, last_name, tokenHash, otp, expiryMinutes]
+  );
+
+  await EmailService.sendOTPEmail(email, first_name, otp);
+
+  logger.info('Signup OTP sent', { email });
+
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: 'OTP sent to email. Valid for 24 hours.',
+      email,
+      expires_in_seconds: expiryMinutes * 60,
+    }),
+  };
 };
 
 export default signupHandler;
