@@ -156,4 +156,6 @@ target/
 # Local deployment artifacts (env-specific / contain credentials)
 document/DEV_DEPLOYMENT.md
 infrastructure/samconfig.toml
-scripts/
+# Top-level helper scripts that embed dev credentials (deploy_dev.sh, run_migrations.sh, …).
+# Anchored with a leading slash so it does NOT also ignore infrastructure/scripts/.
+/scripts/

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/hooks';
 import { useAppContext } from '@/lib/context';
@@ -40,7 +40,7 @@ function daysSinceAdoption(adoptionDate?: string): number {
 export default function DashboardPage() {
   const router = useRouter();
   const { user, loading } = useAuthGuard();
-  const { pet } = useAppContext();
+  const { pet, dataVersion, bumpData } = useAppContext();
   const [checkins, setCheckins] = useState<CheckIn[]>([]);
   const [concernCount, setConcernCount] = useState(0);
   const [checkinDone, setCheckinDone] = useState(false);
@@ -48,18 +48,30 @@ export default function DashboardPage() {
   const [showSheet, setShowSheet] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
 
-  useEffect(() => {
-    if (loading) return;
-    if (!pet) { setDataLoading(false); return; }
-    Promise.all([
-      apiClient.getCheckinHistory(pet.id, { limit: 30 }),
-      apiClient.listConcerns(pet.id),
-    ]).then(([checkinRes, concernRes]) => {
+  const loadData = useCallback(async () => {
+    if (!pet) return;
+    try {
+      const [checkinRes, concernRes] = await Promise.all([
+        apiClient.getCheckinHistory(pet.id, { limit: 30 }),
+        apiClient.listConcerns(pet.id),
+      ]);
       setCheckins(checkinRes.checkins);
       setCheckinDone(checkinRes.checkins.some(c => c.date === localDateString()));
       setConcernCount(concernRes.total);
-    }).catch(() => {}).finally(() => setDataLoading(false));
-  }, [pet, loading]);
+    } catch {
+      /* keep previous data on transient failure */
+    }
+  }, [pet]);
+
+  // Initial load + refetch whenever data is invalidated elsewhere. A check-in
+  // (bottom sheet) or concern (/concern page) bumps dataVersion via the context,
+  // which re-runs this effect — so the stat cards / heatmap / CTA never go stale
+  // even though the bottom-nav can keep this component mounted across navigation.
+  useEffect(() => {
+    if (loading) return;
+    if (!pet) { setDataLoading(false); return; }
+    loadData().finally(() => setDataLoading(false));
+  }, [pet, loading, loadData, dataVersion]);
 
   if (loading || dataLoading) {
     return (
@@ -199,7 +211,7 @@ export default function DashboardPage() {
         onClose={() => setShowSheet(false)}
         petId={pet.id}
         petName={pet.name}
-        onSuccess={feedback => { setCheckinDone(true); setCheckinFeedback(feedback); }}
+        onSuccess={feedback => { setCheckinDone(true); setCheckinFeedback(feedback); bumpData(); }}
       />
     </div>
   );

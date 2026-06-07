@@ -12,6 +12,10 @@ interface AppContextValue {
   setUser: (u: User | null) => void;
   setPet: (p: Pet | null) => void;
   refresh: () => Promise<void>;
+  /** Incremented whenever check-in/concern data is mutated, so screens that
+   *  cache that data (e.g. the dashboard) can refetch. */
+  dataVersion: number;
+  bumpData: () => void;
 }
 
 export const AppContext = createContext<AppContextValue | null>(null);
@@ -20,6 +24,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [pet, setPet] = useState<Pet | null>(null);
   const [loading, setLoading] = useState(true);
+  const [dataVersion, setDataVersion] = useState(0);
+  const bumpData = () => setDataVersion(v => v + 1);
 
   const hydrate = async () => {
     setLoading(true);
@@ -56,7 +62,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ user, pet, loading, setUser, setPet, refresh: hydrate }}>
+    <AppContext.Provider value={{ user, pet, loading, setUser, setPet, refresh: hydrate, dataVersion, bumpData }}>
       {children}
     </AppContext.Provider>
   );

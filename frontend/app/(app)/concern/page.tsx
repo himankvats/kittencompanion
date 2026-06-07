@@ -20,7 +20,7 @@ const RESOLUTION_OPTIONS = [
 
 export default function ConcernPage() {
   const { user, loading } = useAuthGuard();
-  const { pet } = useAppContext();
+  const { pet, bumpData } = useAppContext();
   const [result, setResult] = useState<AcuteEvent | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -36,6 +36,7 @@ export default function ConcernPage() {
     try {
       const res = await apiClient.flagConcern({ ...data, pet_id: pet.id });
       setResult(res);
+      bumpData(); // dashboard concern count is now stale → invalidate
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to submit concern');
     } finally {

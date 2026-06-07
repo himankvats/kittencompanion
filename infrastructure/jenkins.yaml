@@ -1,0 +1,206 @@
+# infrastructure/jenkins.yaml
+# Jenkins CI/CD controller for Kitten Companion, on EC2 INSIDE the app VPC.
+# Running in-VPC gives the pipeline direct private access to RDS (port 5432), so
+# database migrations run with no SSM port-forward / bastion (the dev pain point).
+#
+# Imports VPC/subnet/SG from the network stack (kitten-companion-network-<env>).
+# Deploy AFTER the network stack:
+#   aws cloudformation deploy \
+#     --template-file infrastructure/jenkins.yaml \
+#     --stack-name kitten-companion-jenkins-prod \
+#     --capabilities CAPABILITY_NAMED_IAM \
+#     --parameter-overrides Environment=prod KeyName=<your-ec2-keypair>
+#
+# NOTE: the UserData below mirrors infrastructure/jenkins-bootstrap.sh — keep them
+# in sync. UserData is the canonical copy that actually runs on boot.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Kitten Companion — Jenkins controller (EC2 in-VPC, instance-profile IAM)
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+
+  InstanceType:
+    Type: String
+    Default: t3.large
+    Description: t3.large — 5 Spring Boot builds + Maven are memory-hungry
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Existing EC2 key pair for SSH access
+
+  VolumeSizeGb:
+    Type: Number
+    Default: 60
+    Description: Root EBS size (Jenkins home + ~/.m2 + npm + Docker layers)
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Latest Amazon Linux 2023 AMI (resolved via SSM public parameter)
+
+Resources:
+
+  # ----------------------------------------------------------------
+  # IAM — instance profile role (NO long-lived access keys).
+  # Scoped to what the pipeline does: SAM/CFN deploy + migrate.
+  # ----------------------------------------------------------------
+  JenkinsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'kitten-companion-jenkins-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: !Sub 'kitten-companion-jenkins-deploy-${Environment}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # CloudFormation (sam deploy drives change sets)
+              - Effect: Allow
+                Action: cloudformation:*
+                Resource: '*'
+              # Lambda + API Gateway (app stack resources)
+              - Effect: Allow
+                Action:
+                  - lambda:*
+                  - apigateway:*
+                Resource: '*'
+              # EC2 read-only — required at deploy time to VALIDATE the Lambda
+              # VpcConfig (subnets/SGs). Without these, creating VPC Lambdas fails.
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeVpcs
+                Resource: '*'
+              # IAM — the app template creates a NAMED execution role
+              # (kittencompanion-lambda-role-<env>) → needs role CRUD + PassRole.
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:TagRole
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/kittencompanion-lambda-role-*'
+              # S3 — SAM managed artifact bucket
+              - Effect: Allow
+                Action: s3:*
+                Resource:
+                  - arn:aws:s3:::aws-sam-cli-managed-*
+                  - arn:aws:s3:::aws-sam-cli-managed-*/*
+              # Secrets — read prod secrets (migrate.sh + CFN {{resolve}})
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub 'arn:aws:secretsmanager:*:${AWS::AccountId}:secret:kitten-companion/${Environment}/*'
+              # SSM — read network outputs
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                Resource: !Sub 'arn:aws:ssm:*:${AWS::AccountId}:parameter/kitten-companion/${Environment}/*'
+              # Read-only helpers for smoke tests / debugging
+              - Effect: Allow
+                Action:
+                  - sqs:GetQueueUrl
+                  - sqs:GetQueueAttributes
+                  - logs:GetLogEvents
+                  - logs:FilterLogEvents
+                  - logs:DescribeLogGroups
+                Resource: '*'
+
+  JenkinsInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub 'kitten-companion-jenkins-${Environment}'
+      Roles: [!Ref JenkinsRole]
+
+  # ----------------------------------------------------------------
+  # EC2 controller (public subnet, JenkinsSG from the network stack)
+  # ----------------------------------------------------------------
+  JenkinsInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Ref LatestAmiId
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref JenkinsInstanceProfile
+      SubnetId:
+        Fn::ImportValue: !Sub 'kitten-companion-${Environment}-PublicSubnet1Id'
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub 'kitten-companion-${Environment}-JenkinsSecurityGroupId'
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref VolumeSizeGb
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - { Key: Name, Value: !Sub 'kitten-companion-jenkins-${Environment}' }
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+          set -euxo pipefail
+          dnf update -y
+          dnf install -y git make tar gzip unzip python3 jq postgresql15
+
+          # Java 21 Corretto
+          dnf install -y java-21-amazon-corretto-devel
+          JAVA21_HOME=$(dirname "$(dirname "$(readlink -f "$(command -v java)")")")
+          echo "export JAVA_HOME=${JAVA21_HOME}" > /etc/profile.d/java21.sh
+
+          # Node.js 20
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          dnf install -y nodejs
+
+          # Maven
+          MAVEN_VERSION=3.9.9
+          curl -fsSL "https://archive.apache.org/dist/maven/maven-3/${MAVEN_VERSION}/binaries/apache-maven-${MAVEN_VERSION}-bin.tar.gz" -o /tmp/maven.tar.gz
+          tar -xzf /tmp/maven.tar.gz -C /opt
+          ln -sfn "/opt/apache-maven-${MAVEN_VERSION}" /opt/maven
+          printf 'export M2_HOME=/opt/maven\nexport PATH=${M2_HOME}/bin:${PATH}\n' > /etc/profile.d/maven.sh
+
+          # AWS CLI v2
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          /tmp/aws/install --update
+
+          # AWS SAM CLI
+          curl -fsSL "https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip" -o /tmp/sam.zip
+          unzip -q /tmp/sam.zip -d /tmp/sam-installation
+          /tmp/sam-installation/install --update
+
+          # Docker (optional)
+          dnf install -y docker
+          systemctl enable --now docker
+
+          # Jenkins
+          curl -fsSL https://pkg.jenkins.io/redhat-stable/jenkins.repo -o /etc/yum.repos.d/jenkins.repo
+          rpm --import https://pkg.jenkins.io/redhat-stable/jenkins.io-2023.key
+          dnf install -y jenkins
+          usermod -aG docker jenkins || true
+          systemctl enable jenkins
+          systemctl start jenkins
+
+Outputs:
+  JenkinsPublicIp:
+    Description: Jenkins UI — http://<this>:8080 (initial admin pw at /var/lib/jenkins/secrets/initialAdminPassword)
+    Value: !GetAtt JenkinsInstance.PublicIp
+  JenkinsInstanceId:
+    Value: !Ref JenkinsInstance
+  JenkinsRoleArn:
+    Value: !GetAtt JenkinsRole.Arn

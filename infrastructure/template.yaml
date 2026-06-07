@@ -28,6 +28,19 @@ Parameters:
     Type: String
     Default: subnet-032f04d426b7985d2
 
+  # DB/Redis endpoints. Dev defaults to the manually-provisioned instances so
+  # `sam deploy` keeps working with no overrides. Prod overrides these with the
+  # endpoints from the network stack (resolved via SSM in deploy.sh).
+  DbHost:
+    Type: String
+    Default: kitten-companion-dev.cufeae06m9jz.us-east-1.rds.amazonaws.com
+    Description: RDS PostgreSQL endpoint
+
+  RedisHost:
+    Type: String
+    Default: kitten-companion-dev.vyiyix.0001.use1.cache.amazonaws.com
+    Description: ElastiCache Redis endpoint
+
 # ------------------------------------------------------------------
 # Global defaults applied to all Lambda functions
 # ------------------------------------------------------------------
@@ -45,14 +58,15 @@ Globals:
         - !Ref PrivateSubnet2Id
     Environment:
       Variables:
-        # Database — manually provisioned RDS instance
-        DB_HOST: kitten-companion-dev.cufeae06m9jz.us-east-1.rds.amazonaws.com
+        # Database — endpoint comes from the DbHost parameter (dev default or prod
+        # override resolved from the network stack via deploy.sh).
+        DB_HOST: !Ref DbHost
         DB_PORT: 5432
         DB_NAME: !Sub 'newcat_${Environment}'
         DB_USER: kittenapp
         DB_PASSWORD: !Sub '{{resolve:secretsmanager:kitten-companion/${Environment}/db-credentials:SecretString:password}}'
-        # Cache — manually provisioned ElastiCache instance
-        REDIS_HOST: kitten-companion-dev.vyiyix.0001.use1.cache.amazonaws.com
+        # Cache — endpoint comes from the RedisHost parameter.
+        REDIS_HOST: !Ref RedisHost
         REDIS_PORT: 6379
         # Auth
         JWT_SECRET: !Sub '{{resolve:secretsmanager:kitten-companion/${Environment}/jwt-secret:SecretString}}'
@@ -122,7 +136,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       CodeUri: ../services/auth
       Handler: dist/index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Description: Handles OTP signup, JWT verification, token refresh, and logout
       Events:
         SignupAPI:
@@ -166,7 +180,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       CodeUri: ../services/user
       Handler: dist/index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Description: Manages user profile CRUD and account deletion flow
       Events:
         GetUserAPI:
@@ -351,13 +365,13 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       CodeUri: ../services/notification
       Handler: dist/index.handler
-      Runtime: nodejs20.x
+      Runtime: nodejs24.x
       Description: Sends reminder emails and digest notifications via SendGrid
       Events:
         SQSTrigger:
           Type: SQS
           Properties:
-            Queue: arn:aws:sqs:us-east-1:986995923110:kitten-notification-dev
+            Queue: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:kitten-notification-${Environment}'
             BatchSize: 10
 
 # ------------------------------------------------------------------
