@@ -22,7 +22,18 @@ import software.amazon.awssdk.services.bedrockruntime.model.InvokeModelResponse;
 public class ClaudeService {
 
     private static final Logger log = LoggerFactory.getLogger(ClaudeService.class);
-    private static final String MODEL_ID = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+    // Bedrock model is configurable via the BEDROCK_MODEL_ID env var so it can be
+    // changed (e.g. Haiku ↔ Sonnet) without a code change or rebuild. Defaults to
+    // Claude 3 Haiku — cheapest with the highest token quota. Anthropic models on
+    // Bedrock require an inference profile (us. prefix); bare IDs return 404.
+    private static final String MODEL_ID = resolveModelId();
+
+    private static String resolveModelId() {
+        String configured = System.getenv("BEDROCK_MODEL_ID");
+        return (configured != null && !configured.isBlank())
+                ? configured
+                : "us.anthropic.claude-3-haiku-20240307-v1:0";
+    }
     private final ObjectMapper mapper = new ObjectMapper();
 
     private BedrockRuntimeClient client;

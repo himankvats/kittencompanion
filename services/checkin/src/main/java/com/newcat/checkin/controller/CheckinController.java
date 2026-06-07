@@ -103,7 +103,11 @@ public class CheckinController {
     private APIGatewayProxyResponseEvent response(int status, String body) {
         return new APIGatewayProxyResponseEvent()
                 .withStatusCode(status)
-                .withHeaders(Map.of("Content-Type", "application/json"))
+                .withHeaders(Map.of(
+                        "Content-Type", "application/json",
+                        "Access-Control-Allow-Origin", "*",
+                        "Access-Control-Allow-Headers", "Content-Type,Authorization",
+                        "Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS"))
                 .withBody(body);
     }
 

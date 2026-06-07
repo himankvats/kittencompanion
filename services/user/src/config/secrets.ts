@@ -20,18 +20,24 @@ export async function getSecret(secretName: string): Promise<string> {
     return cache[secretName];
   }
 
-  // Local dev: read from env vars (e.g. jwt-secret → JWT_SECRET)
-  if (process.env.ENVIRONMENT === 'local') {
-    const envKey = secretName.toUpperCase().replace(/-/g, '_');
-    const localValue = process.env[envKey];
-    if (!localValue) {
-      throw new Error(`Missing env var ${envKey} for local secret '${secretName}'`);
-    }
-    cache[secretName] = localValue;
-    return localValue;
+  // Prefer the injected env var if present (e.g. jwt-secret → JWT_SECRET).
+  // The SAM template resolves secrets into env vars at deploy time.
+  const envKey = secretName.toUpperCase().replace(/-/g, '_');
+  if (process.env[envKey]) {
+    cache[secretName] = process.env[envKey] as string;
+    return cache[secretName];
   }
 
-  const command = new GetSecretValueCommand({ SecretId: secretName });
+  // Local dev with no env var set is a misconfiguration
+  if (process.env.ENVIRONMENT === 'local') {
+    throw new Error(`Missing env var ${envKey} for local secret '${secretName}'`);
+  }
+
+  // Fallback: read directly from Secrets Manager using the full path
+  const fullName = secretName.includes('/')
+    ? secretName
+    : `kitten-companion/${process.env.ENVIRONMENT ?? 'dev'}/${secretName}`;
+  const command = new GetSecretValueCommand({ SecretId: fullName });
   const response = await client.send(command);
 
   let value: string;

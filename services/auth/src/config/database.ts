@@ -22,8 +22,7 @@ export const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 300_000,
   connectionTimeoutMillis: 30_000,
-  // TODO: enable SSL for non-local environments (TDD Section 5.2)
-  // ssl: process.env.ENVIRONMENT !== 'local' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.ENVIRONMENT !== 'local' ? { rejectUnauthorized: false } : false,
 });
 
 pool.on('error', (err) => {

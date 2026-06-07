@@ -152,3 +152,8 @@ target/
 *.class
 *.jar
 !*-sources.jar
+
+# Local deployment artifacts (env-specific / contain credentials)
+document/DEV_DEPLOYMENT.md
+infrastructure/samconfig.toml
+scripts/

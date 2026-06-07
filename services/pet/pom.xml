@@ -117,9 +117,58 @@
 
   <build>
     <plugins>
+      <!--
+        maven-shade-plugin produces a flat uber-JAR with all classes and
+        dependencies at the JAR root, which AWS Lambda's Java runtime can load.
+        (The spring-boot-maven-plugin's BOOT-INF/ layout is NOT Lambda-compatible.)
+        The Lambda handler bootstraps Spring internally via SpringApplication.run,
+        so we do not need the Spring Boot launcher.
+      -->
       <plugin>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-maven-plugin</artifactId>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <version>3.5.1</version>
+        <configuration>
+          <createDependencyReducedPom>false</createDependencyReducedPom>
+          <filters>
+            <filter>
+              <artifact>*:*</artifact>
+              <excludes>
+                <exclude>META-INF/*.SF</exclude>
+                <exclude>META-INF/*.DSA</exclude>
+                <exclude>META-INF/*.RSA</exclude>
+              </excludes>
+            </filter>
+          </filters>
+          <transformers>
+            <!-- Merge Spring's spring.handlers / spring.schemas / spring.factories -->
+            <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+              <resource>META-INF/spring.handlers</resource>
+            </transformer>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+              <resource>META-INF/spring.schemas</resource>
+            </transformer>
+            <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+              <resource>META-INF/spring.factories</resource>
+            </transformer>
+            <transformer implementation="org.springframework.boot.maven.PropertiesMergingResourceTransformer">
+              <resource>META-INF/spring.factories</resource>
+            </transformer>
+          </transformers>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <version>3.2.5</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>shade</goal></goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

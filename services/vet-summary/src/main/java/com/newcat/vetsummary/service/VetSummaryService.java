@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @Service
 public class VetSummaryService {
@@ -116,7 +117,9 @@ public class VetSummaryService {
             .map(Map.Entry::getKey)
             .orElse("unknown");
 
-        // 6. Call Claude three times
+        // 6. Call Claude three times — run concurrently since the calls are
+        //    independent. This cuts total LLM latency from ~3x to ~1x a single
+        //    call, keeping the whole request well under the API Gateway 29s limit.
         String systemPrompt = claudeService.getVetSummarySystemPrompt();
 
         String eatingPrompt = String.format(
@@ -124,21 +127,30 @@ public class VetSummaryService {
             "Write a 2-3 sentence clinical eating summary.",
             petName, eatingTotal, eatingNormal, eatingConsistencyPct
         );
-        String eatingSummary = claudeService.callClaude(systemPrompt, eatingPrompt, 200);
-
         String litterPrompt = String.format(
             "Litter data for %s: %d observations, %d normal days. " +
             "Write a 2-3 sentence clinical litter habits summary.",
             petName, eatingTotal, litterNormal
         );
-        String litterSummary = claudeService.callClaude(systemPrompt, litterPrompt, 200);
-
         String activityPrompt = String.format(
             "Activity data for %s: dominant activity level is '%s' across %d observations. " +
             "Write a 2-3 sentence clinical activity and behavior summary.",
             petName, dominantActivity, eatingTotal
         );
-        String activitySummary = claudeService.callClaude(systemPrompt, activityPrompt, 200);
+
+        CompletableFuture<String> eatingFuture =
+            CompletableFuture.supplyAsync(() -> claudeService.callClaude(systemPrompt, eatingPrompt, 200));
+        CompletableFuture<String> litterFuture =
+            CompletableFuture.supplyAsync(() -> claudeService.callClaude(systemPrompt, litterPrompt, 200));
+        CompletableFuture<String> activityFuture =
+            CompletableFuture.supplyAsync(() -> claudeService.callClaude(systemPrompt, activityPrompt, 200));
+
+        // Block until all three complete (or one fails)
+        CompletableFuture.allOf(eatingFuture, litterFuture, activityFuture).join();
+
+        String eatingSummary = eatingFuture.join();
+        String litterSummary = litterFuture.join();
+        String activitySummary = activityFuture.join();
 
         // 7. Determine date range
         LocalDate now = LocalDate.now();

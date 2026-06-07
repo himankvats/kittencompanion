@@ -17,7 +17,7 @@ export const deleteUserHandler = async (
   event: APIGatewayProxyEvent,
   _context: Context
 ): Promise<APIGatewayProxyResult> => {
-  const userId = event.pathParameters?.user_id;
+  const userId = event.pathParameters?.id;
   if (!userId) {
     throw new CustomError(400, 'MISSING_USER_ID', 'user_id path parameter is required');
   }

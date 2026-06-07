@@ -110,6 +110,9 @@ public class PetController {
     private APIGatewayProxyResponseEvent buildResponse(int statusCode, Object body) throws Exception {
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", "application/json");
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Access-Control-Allow-Headers", "Content-Type,Authorization");
+        headers.put("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
 
         APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
         response.setStatusCode(statusCode);
@@ -121,6 +124,9 @@ public class PetController {
     private APIGatewayProxyResponseEvent buildErrorResponse(int statusCode, String errorCode, String requestId) {
         Map<String, String> headers = new HashMap<>();
         headers.put("Content-Type", "application/json");
+        headers.put("Access-Control-Allow-Origin", "*");
+        headers.put("Access-Control-Allow-Headers", "Content-Type,Authorization");
+        headers.put("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
 
         APIGatewayProxyResponseEvent response = new APIGatewayProxyResponseEvent();
         response.setStatusCode(statusCode);
